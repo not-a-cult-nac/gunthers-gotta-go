@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gunther's Gotta Go - Multiplayer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'Courier New', monospace; background: #1a1a2e; }
+        canvas { display: block; }
+        
+        #lobby {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: #fff; z-index: 100;
+        }
+        #lobby h1 { font-size: 56px; color: #ff6b35; text-shadow: 4px 4px 8px #000; margin-bottom: 10px; }
+        #lobby .subtitle { font-size: 16px; color: #aaa; margin-bottom: 30px; }
+        #lobby input {
+            padding: 12px 25px; font-size: 18px; margin: 8px;
+            border: 2px solid #ff6b35; background: rgba(255,255,255,0.1);
+            color: #fff; font-family: inherit; text-align: center; width: 250px;
+        }
+        #lobby input::placeholder { color: #888; }
+        #lobby button {
+            padding: 15px 40px; font-size: 20px; background: #ff6b35;
+            border: none; color: #fff; cursor: pointer; font-family: inherit; margin: 8px;
+        }
+        #lobby button:hover { background: #ff8c5a; }
+        .button-row { display: flex; gap: 15px; margin-top: 15px; }
+        #room-code-display { font-size: 56px; color: #00ff88; letter-spacing: 12px; margin: 15px; }
+        #player-list { margin: 15px; font-size: 16px; }
+        #player-list div { margin: 4px; color: #88ff88; }
+        #waiting-room, #join-form { display: none; flex-direction: column; align-items: center; }
+        #main-menu { display: flex; flex-direction: column; align-items: center; }
+        .error-msg { color: #ff4444; margin: 8px; }
+        
+        #ui {
+            position: absolute; top: 10px; left: 10px;
+            color: #fff; text-shadow: 2px 2px 4px #000;
+            font-size: 18px; pointer-events: none; display: none;
+        }
+        #gunther-speech {
+            position: absolute; top: 22%; left: 50%; transform: translate(-50%, -50%);
+            color: #ffeb3b; font-size: 28px; font-weight: bold;
+            text-shadow: 3px 3px 6px #000; pointer-events: none;
+            opacity: 0; transition: opacity 0.3s; text-align: center; max-width: 600px;
+        }
+        #instructions {
+            position: absolute; bottom: 10px; left: 10px;
+            color: #fff; text-shadow: 2px 2px 4px #000;
+            font-size: 13px; pointer-events: none; display: none;
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 20px; height: 20px; pointer-events: none; display: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000;
+        }
+        #crosshair::before { width: 2px; height: 20px; left: 9px; }
+        #crosshair::after { width: 20px; height: 2px; top: 9px; }
+        
+        #end-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            color: #fff; z-index: 100;
+        }
+        #end-screen.win { background: rgba(0,100,0,0.95); }
+        #end-screen.lose { background: rgba(100,0,0,0.95); }
+        #end-screen h1 { font-size: 56px; margin-bottom: 20px; }
+        #end-screen p { font-size: 22px; max-width: 550px; text-align: center; }
+        #end-screen button {
+            margin-top: 25px; padding: 18px 50px; font-size: 22px;
+            background: #fff; border: none; color: #333; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="lobby">
+        <h1>GUNTHER'S GOTTA GO</h1>
+        <p class="subtitle">500m escort mission — he WANTS to die</p>
+        
+        <div id="main-menu">
+            <input type="text" id="player-name" placeholder="Your Name" maxlength="15">
+            <div class="button-row">
+                <button onclick="createRoom()">CREATE GAME</button>
+                <button onclick="showJoinForm()">JOIN GAME</button>
+            </div>
+        </div>
+        
+        <div id="join-form">
+            <input type="text" id="room-code-input" placeholder="Room Code" maxlength="4" style="text-transform:uppercase;">
+            <div class="button-row">
+                <button onclick="joinRoom()">JOIN</button>
+                <button onclick="showMainMenu()">BACK</button>
+            </div>
+            <div id="join-error" class="error-msg"></div>
+        </div>
+        
+        <div id="waiting-room">
+            <p>ROOM CODE:</p>
+            <div id="room-code-display"></div>
+            <p>Share this code with friends!</p>
+            <div id="player-list"></div>
+            <button onclick="startGame()">START GAME</button>
+            <p style="margin-top:15px;color:#888;font-size:13px;">1-4 players • Anyone can drive</p>
+        </div>
+    </div>
+    
+    <div id="end-screen">
+        <h1 id="end-title"></h1>
+        <p id="end-text"></p>
+        <button onclick="location.reload()">PLAY AGAIN</button>
+    </div>
+    
+    <div id="ui">
+        <div>GUNTHER: <span id="gunther-status">IN CAR</span></div>
+        <div>ENEMIES: <span id="enemy-count">0</span></div>
+        <div>DISTANCE: <span id="distance">500</span>m</div>
+        <div>PLAYERS: <span id="player-count">1</span></div>
+    </div>
+    <div id="gunther-speech"></div>
+    <div id="crosshair"></div>
+    <div id="instructions">
+        CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | E Exit/Enter | SPACE Grab Gunther
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        
+        let scene, camera, renderer;
+        let car, player, gunther, goal;
+        let enemyMeshes = new Map();
+        let otherPlayers = new Map();
+        let isInCar = true;
+        let gameStarted = false;
+        let playerId = null;
+        let serverState = null;
+        
+        const keys = {};
+        let mouseX = 0, mouseY = 0;
+        let carRotation = 0;
+        let playerRotation = 0;
+        let lastQuote = '';
+        
+        const GOAL_Z = 440;
+        const START_Z = -60;
+        const TERRAIN_SIZE = 600;
+        
+        // Hazards (must match server)
+        const HAZARDS = [
+            { x: 40, z: 50, type: 'lava', radius: 12 },
+            { x: -35, z: 180, type: 'lava', radius: 10 },
+            { x: 50, z: 320, type: 'lava', radius: 14 },
+            { x: -50, z: 100, type: 'cliff', radius: 15 },
+            { x: 55, z: 250, type: 'cliff', radius: 12 },
+            { x: -45, z: 380, type: 'cliff', radius: 15 },
+            { x: -15, z: 20, type: 'trap', radius: 2 },
+            { x: 20, z: 80, type: 'trap', radius: 2 },
+            { x: -25, z: 140, type: 'trap', radius: 2 },
+            { x: 10, z: 200, type: 'trap', radius: 2 },
+            { x: -30, z: 260, type: 'trap', radius: 2 },
+            { x: 25, z: 300, type: 'trap', radius: 2 },
+            { x: -10, z: 350, type: 'trap', radius: 2 },
+            { x: 15, z: 400, type: 'trap', radius: 2 },
+        ];
+        
+        function getTerrainHeight(x, z) {
+            // Flat terrain for now - hills can come later
+            return 0;
+        }
+        
+        // Socket handlers
+        function showJoinForm() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('join-form').style.display = 'flex';
+        }
+        
+        function showMainMenu() {
+            document.getElementById('main-menu').style.display = 'flex';
+            document.getElementById('join-form').style.display = 'none';
+            document.getElementById('waiting-room').style.display = 'none';
+        }
+        
+        function createRoom() {
+            const name = document.getElementById('player-name').value || 'Player';
+            socket.emit('createRoom', name);
+        }
+        
+        function joinRoom() {
+            const name = document.getElementById('player-name').value || 'Player';
+            const code = document.getElementById('room-code-input').value.toUpperCase();
+            if (code.length !== 4) {
+                document.getElementById('join-error').textContent = 'Enter a 4-letter code';
+                return;
+            }
+            socket.emit('joinRoom', { code, playerName: name });
+        }
+        
+        socket.on('roomCreated', (data) => {
+            playerId = data.playerId;
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('waiting-room').style.display = 'flex';
+            document.getElementById('room-code-display').textContent = data.code;
+        });
+        
+        socket.on('roomJoined', (data) => {
+            playerId = data.playerId;
+            document.getElementById('join-form').style.display = 'none';
+            document.getElementById('waiting-room').style.display = 'flex';
+            document.getElementById('room-code-display').textContent = data.code;
+        });
+        
+        socket.on('error', (msg) => {
+            document.getElementById('join-error').textContent = msg;
+        });
+        
+        socket.on('gameStarted', () => {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('ui').style.display = 'block';
+            document.getElementById('crosshair').style.display = 'block';
+            document.getElementById('instructions').style.display = 'block';
+            document.body.requestPointerLock();
+            gameStarted = true;
+            init();
+        });
+        
+        socket.on('gameState', (state) => {
+            serverState = state;
+            if (scene) updateFromServer(state);
+        });
+        
+        socket.on('enemyHit', (data) => {
+            const mesh = enemyMeshes.get(data.id);
+            if (mesh) {
+                mesh.children.forEach(c => {
+                    if (c.material) {
+                        const orig = c.material.color.getHex();
+                        c.material.color.setHex(0xff0000);
+                        setTimeout(() => { if (c.material) c.material.color.setHex(orig); }, 100);
+                    }
+                });
+            }
+        });
+        
+        function startGame() { socket.emit('startGame'); }
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.Fog(0x87ceeb, 80, 250);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            
+            // Lighting
+            scene.add(new THREE.AmbientLight(0x606060, 0.6));
+            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            sun.position.set(50, 100, 50);
+            sun.castShadow = true;
+            scene.add(sun);
+            
+            // Terrain - create multiple chunks
+            createTerrain();
+            createCar();
+            createPlayer();
+            createGunther();
+            createGoal();
+            createHazards();
+            createScenery();
+            
+            document.addEventListener('keydown', e => keys[e.code] = true);
+            document.addEventListener('keyup', e => keys[e.code] = false);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('click', onShoot);
+            window.addEventListener('resize', onResize);
+            
+            animate();
+        }
+        
+        function createTerrain() {
+            // Simple flat terrain
+            const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE + 200);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x4a8505 });
+            const terrain = new THREE.Mesh(geo, mat);
+            terrain.rotation.x = -Math.PI / 2;
+            terrain.position.z = (GOAL_Z + START_Z) / 2;
+            terrain.receiveShadow = true;
+            scene.add(terrain);
+        }
+        
+        function createCar() {
+            car = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ color: 0x4a5d23 });
+            
+            const body = new THREE.Mesh(new THREE.BoxGeometry(3, 1.8, 4.5), mat);
+            body.position.y = 1.4; body.castShadow = true;
+            car.add(body);
+            
+            const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1, 2), mat);
+            cab.position.set(0, 2.6, -0.5); cab.castShadow = true;
+            car.add(cab);
+            
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+            [[-1.2, -1.3], [1.2, -1.3], [-1.2, 1.3], [1.2, 1.3]].forEach(([x, z]) => {
+                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.4), wheelMat);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(x, 0.5, z);
+                car.add(wheel);
+            });
+            
+            car.position.set(0, 0, START_Z);
+            scene.add(car);
+        }
+        
+        function createPlayer() {
+            player = new THREE.Group();
+            
+            const body = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.35, 0.45, 1.4),
+                new THREE.MeshStandardMaterial({ color: 0x2255aa })
+            );
+            body.position.y = 0.9;
+            player.add(body);
+            
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.3),
+                new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+            );
+            head.position.y = 1.9;
+            player.add(head);
+            
+            const gun = new THREE.Mesh(
+                new THREE.BoxGeometry(0.15, 0.15, 0.8),
+                new THREE.MeshStandardMaterial({ color: 0x333333 })
+            );
+            gun.position.set(0.4, 1.2, 0.4);
+            player.add(gun);
+            
+            player.visible = false;
+            scene.add(player);
+        }
+        
+        function createGunther() {
+            gunther = new THREE.Group();
+            
+            const body = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.3, 0.4, 1),
+                new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff3300, emissiveIntensity: 0.2 })
+            );
+            body.position.y = 0.7;
+            gunther.add(body);
+            
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.35), new THREE.MeshStandardMaterial({ color: 0xffcc99 }));
+            head.position.y = 1.55;
+            gunther.add(head);
+            
+            const hair = new THREE.Mesh(
+                new THREE.SphereGeometry(0.38, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+                new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffaa00, emissiveIntensity: 0.3 })
+            );
+            hair.position.y = 1.65;
+            gunther.add(hair);
+            
+            const marker = new THREE.Mesh(
+                new THREE.ConeGeometry(0.25, 0.5, 4),
+                new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.6 })
+            );
+            marker.rotation.x = Math.PI;
+            marker.position.y = 2.5;
+            marker.name = 'marker';
+            gunther.add(marker);
+            
+            gunther.visible = false;
+            scene.add(gunther);
+        }
+        
+        function createGoal() {
+            goal = new THREE.Group();
+            
+            const platform = new THREE.Mesh(
+                new THREE.CylinderGeometry(8, 8, 0.5),
+                new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffaa00, emissiveIntensity: 0.3 })
+            );
+            platform.position.y = 0.25;
+            goal.add(platform);
+            
+            const pole = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.2, 0.2, 12),
+                new THREE.MeshStandardMaterial({ color: 0x8b4513 })
+            );
+            pole.position.y = 6;
+            goal.add(pole);
+            
+            const flag = new THREE.Mesh(
+                new THREE.PlaneGeometry(5, 3),
+                new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.2, side: THREE.DoubleSide })
+            );
+            flag.position.set(2.5, 10.5, 0);
+            goal.add(flag);
+            
+            goal.position.set(0, getTerrainHeight(0, GOAL_Z), GOAL_Z);
+            scene.add(goal);
+        }
+        
+        function createHazards() {
+            for (const h of HAZARDS) {
+                if (h.type === 'lava') {
+                    const lava = new THREE.Mesh(
+                        new THREE.CircleGeometry(h.radius, 24),
+                        new THREE.MeshStandardMaterial({ color: 0xff4500, emissive: 0xff2200, emissiveIntensity: 0.6 })
+                    );
+                    lava.rotation.x = -Math.PI / 2;
+                    lava.position.set(h.x, 0.1, h.z);
+                    scene.add(lava);
+                    
+                    const light = new THREE.PointLight(0xff4500, 1, h.radius * 2);
+                    light.position.set(h.x, 3, h.z);
+                    scene.add(light);
+                } else if (h.type === 'cliff') {
+                    const edge = new THREE.Mesh(
+                        new THREE.BoxGeometry(h.radius * 2, 1, 4),
+                        new THREE.MeshStandardMaterial({ color: 0x8b4513 })
+                    );
+                    edge.position.set(h.x, 0.5, h.z);
+                    scene.add(edge);
+                    
+                    const void_ = new THREE.Mesh(
+                        new THREE.PlaneGeometry(h.radius * 2, 25),
+                        new THREE.MeshStandardMaterial({ color: 0x000022 })
+                    );
+                    void_.rotation.x = -Math.PI / 2;
+                    void_.position.set(h.x, -0.1, h.z + 14);
+                    scene.add(void_);
+                } else if (h.type === 'trap') {
+                    const trap = new THREE.Mesh(
+                        new THREE.TorusGeometry(0.6, 0.12, 8, 12),
+                        new THREE.MeshStandardMaterial({ color: 0x888888 })
+                    );
+                    trap.rotation.x = Math.PI / 2;
+                    trap.position.set(h.x, getTerrainHeight(h.x, h.z) + 0.15, h.z);
+                    scene.add(trap);
+                }
+            }
+        }
+        
+        function createScenery() {
+            // Trees along the route
+            for (let i = 0; i < 80; i++) {
+                const x = (Math.random() - 0.5) * 120;
+                const z = START_Z + Math.random() * (GOAL_Z - START_Z + 50);
+                
+                // Skip near hazards
+                let tooClose = false;
+                for (const h of HAZARDS) {
+                    if (Math.hypot(x - h.x, z - h.z) < h.radius + 8) { tooClose = true; break; }
+                }
+                if (tooClose || Math.abs(x) < 15) continue;
+                
+                const tree = new THREE.Group();
+                const trunk = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.3, 0.4, 2.5),
+                    new THREE.MeshStandardMaterial({ color: 0x4a3520 })
+                );
+                trunk.position.y = 1.25;
+                tree.add(trunk);
+                
+                const foliage = new THREE.Mesh(
+                    new THREE.ConeGeometry(2, 4, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x228b22 })
+                );
+                foliage.position.y = 4.5;
+                tree.add(foliage);
+                
+                tree.position.set(x, getTerrainHeight(x, z), z);
+                scene.add(tree);
+            }
+        }
+        
+        function createEnemy(id) {
+            const enemy = new THREE.Group();
+            
+            const body = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.4, 0.5, 1.6),
+                new THREE.MeshStandardMaterial({ color: 0x880000 })
+            );
+            body.position.y = 1;
+            enemy.add(body);
+            
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.35), new THREE.MeshStandardMaterial({ color: 0xffcc99 }));
+            head.position.y = 2;
+            enemy.add(head);
+            
+            const hood = new THREE.Mesh(
+                new THREE.ConeGeometry(0.4, 0.6, 8),
+                new THREE.MeshStandardMaterial({ color: 0x111111 })
+            );
+            hood.position.y = 2.3;
+            enemy.add(hood);
+            
+            const bag = new THREE.Mesh(
+                new THREE.BoxGeometry(0.35, 0.35, 0.35),
+                new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff1493, emissiveIntensity: 0.2 })
+            );
+            bag.position.set(0.45, 1.3, 0);
+            enemy.add(bag);
+            
+            scene.add(enemy);
+            enemyMeshes.set(id, enemy);
+            return enemy;
+        }
+        
+        function updateFromServer(state) {
+            // Car - only update from server if we're NOT in the car (let driver be authoritative)
+            if (car && state.car) {
+                if (!isInCar) {
+                    // Not driving - accept server position
+                    car.position.x = state.car.x;
+                    car.position.z = state.car.z;
+                    car.position.y = getTerrainHeight(state.car.x, state.car.z);
+                    car.rotation.y = state.car.rotation;
+                    carRotation = state.car.rotation;
+                }
+                // If driving, we already set these locally - don't override
+            }
+            
+            // Gunther
+            if (gunther && state.gunther) {
+                gunther.visible = state.gunther.visible;
+                gunther.position.x = state.gunther.x;
+                gunther.position.z = state.gunther.z;
+                gunther.position.y = getTerrainHeight(state.gunther.x, state.gunther.z);
+                
+                const marker = gunther.getObjectByName('marker');
+                if (marker) {
+                    marker.position.y = 2.5 + Math.sin(Date.now() * 0.008) * 0.2;
+                    marker.rotation.y += 0.03;
+                }
+                
+                document.getElementById('gunther-status').textContent = 
+                    state.gunther.state === 'in_car' ? '✓ IN CAR' :
+                    state.gunther.state === 'captured' ? '⚠️ CAPTURED!' :
+                    state.gunther.state === 'trapped' ? '🪤 TRAPPED!' : '⚠️ WANDERING';
+                document.getElementById('gunther-status').style.color = 
+                    state.gunther.state === 'in_car' ? '#88ff88' : '#ff4444';
+            }
+            
+            // Enemies
+            const currentIds = new Set(state.enemies.map(e => e.id));
+            enemyMeshes.forEach((mesh, id) => {
+                if (!currentIds.has(id)) {
+                    scene.remove(mesh);
+                    enemyMeshes.delete(id);
+                }
+            });
+            
+            for (const e of state.enemies) {
+                let mesh = enemyMeshes.get(e.id);
+                if (!mesh) mesh = createEnemy(e.id);
+                mesh.position.x = e.x;
+                mesh.position.z = e.z;
+                mesh.position.y = getTerrainHeight(e.x, e.z);
+            }
+            
+            // Quote
+            if (state.lastQuote && state.lastQuote !== lastQuote) {
+                lastQuote = state.lastQuote;
+                showSpeech(state.lastQuote);
+            }
+            
+            // UI
+            document.getElementById('enemy-count').textContent = state.enemies.length;
+            document.getElementById('player-count').textContent = state.players.length;
+            
+            const goalDist = Math.hypot(state.car.x, state.car.z - GOAL_Z);
+            document.getElementById('distance').textContent = Math.round(goalDist);
+            
+            // Game over
+            if (state.gameState === 'won') {
+                endGame(true, "Gunther delivered safely! He immediately ran toward the gift shop's knife display.");
+            } else if (state.gameState === 'lost') {
+                endGame(false, state.loseReason);
+            }
+        }
+        
+        function onMouseMove(e) {
+            if (!gameStarted) return;
+            mouseX += e.movementX * 0.003;
+            mouseY = Math.max(-1, Math.min(1, mouseY + e.movementY * 0.003));
+        }
+        
+        function onShoot() {
+            if (!gameStarted || isInCar) return;
+            
+            const dir = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
+            
+            socket.emit('shoot', {
+                x: player.position.x,
+                z: player.position.z,
+                dirX: dir.x,
+                dirZ: dir.z
+            });
+            
+            // Tracer
+            const tracer = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.03, 0.03, 40),
+                new THREE.MeshBasicMaterial({ color: 0xffff00 })
+            );
+            tracer.position.copy(player.position);
+            tracer.position.y += 1.2;
+            tracer.position.x += dir.x * 20;
+            tracer.position.z += dir.z * 20;
+            tracer.rotation.x = Math.PI / 2;
+            tracer.rotation.order = 'YXZ';
+            tracer.rotation.y = playerRotation;
+            scene.add(tracer);
+            setTimeout(() => scene.remove(tracer), 50);
+        }
+        
+        function showSpeech(text) {
+            const el = document.getElementById('gunther-speech');
+            el.textContent = text;
+            el.style.opacity = 1;
+            setTimeout(() => el.style.opacity = 0, 3000);
+        }
+        
+        function updateControls(delta) {
+            if (!gameStarted || !car) return;
+            
+            if (isInCar) {
+                const driveSpeed = 12 * delta;
+                const turnSpeed = 2 * delta;
+                
+                if (keys['KeyA']) carRotation += turnSpeed;
+                if (keys['KeyD']) carRotation -= turnSpeed;
+                
+                const forward = new THREE.Vector3(Math.sin(carRotation), 0, Math.cos(carRotation));
+                
+                if (keys['KeyW']) {
+                    car.position.x += forward.x * driveSpeed;
+                    car.position.z += forward.z * driveSpeed;
+                }
+                if (keys['KeyS']) {
+                    car.position.x -= forward.x * driveSpeed * 0.5;
+                    car.position.z -= forward.z * driveSpeed * 0.5;
+                }
+                
+                car.position.x = Math.max(-80, Math.min(80, car.position.x));
+                car.position.z = Math.max(START_Z - 20, Math.min(GOAL_Z + 20, car.position.z));
+                car.position.y = getTerrainHeight(car.position.x, car.position.z);
+                car.rotation.y = carRotation;
+                
+                socket.emit('carUpdate', { x: car.position.x, z: car.position.z, rotation: carRotation });
+                
+                // Camera
+                const camBack = new THREE.Vector3(-forward.x * 14, 9, -forward.z * 14);
+                camera.position.copy(car.position).add(camBack);
+                camera.lookAt(car.position.x, car.position.y + 2, car.position.z);
+            } else {
+                const runSpeed = 7 * delta;
+                playerRotation = -mouseX;
+                
+                const forward = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
+                const right = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
+                
+                if (keys['KeyW']) { player.position.x += forward.x * runSpeed; player.position.z += forward.z * runSpeed; }
+                if (keys['KeyS']) { player.position.x -= forward.x * runSpeed; player.position.z -= forward.z * runSpeed; }
+                if (keys['KeyA']) { player.position.x += right.x * runSpeed; player.position.z += right.z * runSpeed; }
+                if (keys['KeyD']) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
+                
+                player.position.y = getTerrainHeight(player.position.x, player.position.z);
+                player.rotation.y = playerRotation;
+                
+                socket.emit('playerUpdate', { x: player.position.x, z: player.position.z, inCar: false });
+                
+                const camBack = new THREE.Vector3(-forward.x * 5, 3, -forward.z * 5);
+                camera.position.copy(player.position).add(camBack);
+                camera.position.y += 2;
+                camera.lookAt(player.position.x, player.position.y + 1.5, player.position.z);
+            }
+            
+            // E to exit/enter
+            if (keys['KeyE'] && !keys['KeyE_prev']) {
+                if (isInCar) {
+                    isInCar = false;
+                    player.visible = true;
+                    player.position.copy(car.position);
+                    player.position.x += 4;
+                    player.position.y = getTerrainHeight(player.position.x, player.position.z);
+                    playerRotation = carRotation;
+                    mouseX = -carRotation;
+                    socket.emit('exitCar');
+                } else {
+                    const dist = Math.hypot(player.position.x - car.position.x, player.position.z - car.position.z);
+                    if (dist < 6) {
+                        isInCar = true;
+                        player.visible = false;
+                        socket.emit('enterCar');
+                    }
+                }
+            }
+            keys['KeyE_prev'] = keys['KeyE'];
+            
+            // SPACE to grab
+            if (keys['Space'] && !keys['Space_prev'] && !isInCar) {
+                socket.emit('grabGunther');
+            }
+            keys['Space_prev'] = keys['Space'];
+        }
+        
+        function endGame(won, msg) {
+            gameStarted = false;
+            document.exitPointerLock();
+            const el = document.getElementById('end-screen');
+            el.className = won ? 'win' : 'lose';
+            el.style.display = 'flex';
+            document.getElementById('end-title').textContent = won ? '🎉 GUNTHER DELIVERED!' : '💀 GUNTHER IS GONE';
+            document.getElementById('end-text').textContent = msg;
+        }
+        
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        let lastTime = 0;
+        function animate(time = 0) {
+            requestAnimationFrame(animate);
+            const delta = Math.min((time - lastTime) / 1000, 0.1);
+            lastTime = time;
+            
+            if (gameStarted) updateControls(delta);
+            if (renderer && scene && camera) renderer.render(scene, camera);
+        }
+        
+        document.addEventListener('pointerlockchange', () => {
+            if (!document.pointerLockElement && gameStarted) {
+                document.body.requestPointerLock();
+            }
+        });
+    </script>
+</body>
+</html>

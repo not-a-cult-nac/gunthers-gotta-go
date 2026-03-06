@@ -180,8 +180,8 @@
         <h3>🔧 DEBUG PANEL (~)</h3>
         <div class="debug-row">
             <label>Gunther Escape Rate</label>
-            <input type="range" id="debug-escape-rate" min="0" max="100" value="25">
-            <span class="value" id="debug-escape-rate-val">0.025</span>
+            <input type="range" id="debug-escape-rate" min="0" max="500" value="150">
+            <span class="value" id="debug-escape-rate-val">0.150</span>
         </div>
         <div class="debug-row">
             <label>Enemy Lure Range</label>
@@ -232,7 +232,7 @@
         // Debug panel state
         let debugPanelOpen = false;
         const debugConfig = {
-            escapeRate: 0.025,
+            escapeRate: 0.15,       // Higher default - Gunther gets bored often
             lureRange: 12,
             enemySpeed: 3,
             guntherSpeed: 3.5

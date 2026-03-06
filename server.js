@@ -68,7 +68,7 @@ class GameRoom {
         
         // Debug config (can be adjusted via debug panel)
         this.config = {
-            escapeRate: 0.025,      // Probability per second of random escape
+            escapeRate: 0.15,       // Probability per second of random escape (~every 7 seconds)
             lureRange: 12,          // Distance at which enemies lure Gunther out
             enemySpeed: 3,          // Base enemy movement speed
             guntherSpeed: 3.5       // Gunther wander speed

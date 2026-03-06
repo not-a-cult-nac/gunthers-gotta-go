@@ -202,7 +202,36 @@
     </div>
     
     <div id="instructions">
-        CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | E Exit/Enter | SPACE Grab Gunther
+        CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | E Exit/Enter | SPACE Grab Gunther | H Hold Hand
+    </div>
+    <div id="strain-meter" style="
+        position: absolute;
+        bottom: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 300px;
+        height: 30px;
+        background: rgba(0,0,0,0.7);
+        border-radius: 15px;
+        overflow: hidden;
+        display: none;
+    ">
+        <div id="strain-label" style="
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 14px;
+            line-height: 30px;
+            text-shadow: 1px 1px 2px black;
+            z-index: 1;
+        ">🖐️ GUNTHER'S PULL STRENGTH</div>
+        <div id="strain-bar" style="
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4CAF50, #FFC107, #f44336);
+            transition: width 0.1s;
+        "></div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -215,6 +244,7 @@
         let enemyMeshes = new Map();
         let otherPlayers = new Map();
         let isInCar = true;
+        let guntherHoldingHands = false;
         let gameStarted = false;
         let playerId = null;
         let serverState = null;
@@ -688,12 +718,37 @@
                     marker.rotation.y += 0.03;
                 }
                 
-                document.getElementById('gunther-status').textContent = 
-                    state.gunther.state === 'in_car' ? '✓ IN CAR' :
-                    state.gunther.state === 'captured' ? '⚠️ CAPTURED!' :
-                    state.gunther.state === 'trapped' ? '🪤 TRAPPED!' : '⚠️ WANDERING';
-                document.getElementById('gunther-status').style.color = 
-                    state.gunther.state === 'in_car' ? '#88ff88' : '#ff4444';
+                guntherHoldingHands = state.gunther.state === 'holding_hands';
+                
+                let statusText, statusColor;
+                if (state.gunther.state === 'in_car') {
+                    statusText = '✓ IN CAR';
+                    statusColor = '#88ff88';
+                } else if (state.gunther.state === 'captured') {
+                    statusText = '⚠️ CAPTURED!';
+                    statusColor = '#ff4444';
+                } else if (state.gunther.state === 'trapped') {
+                    statusText = '🪤 TRAPPED!';
+                    statusColor = '#ff8844';
+                } else if (state.gunther.state === 'holding_hands') {
+                    statusText = state.gunther.strain > 60 ? '🖐️ HOLDING (STRUGGLING!)' : '🖐️ HOLDING HANDS';
+                    statusColor = state.gunther.strain > 60 ? '#ffaa00' : '#88ffff';
+                } else {
+                    statusText = '⚠️ WANDERING';
+                    statusColor = '#ff4444';
+                }
+                document.getElementById('gunther-status').textContent = statusText;
+                document.getElementById('gunther-status').style.color = statusColor;
+                
+                // Update strain meter
+                const strainMeter = document.getElementById('strain-meter');
+                const strainBar = document.getElementById('strain-bar');
+                if (state.gunther.state === 'holding_hands') {
+                    strainMeter.style.display = 'block';
+                    strainBar.style.width = (state.gunther.strain || 0) + '%';
+                } else {
+                    strainMeter.style.display = 'none';
+                }
             }
             
             // Enemies
@@ -857,6 +912,16 @@
                 socket.emit('grabGunther');
             }
             keys['Space_prev'] = keys['Space'];
+            
+            // Hold hand with H key
+            if (keys['KeyH'] && !keys['KeyH_prev'] && !isInCar) {
+                if (guntherHoldingHands) {
+                    socket.emit('releaseHand');
+                } else {
+                    socket.emit('holdHand');
+                }
+            }
+            keys['KeyH_prev'] = keys['KeyH'];
         }
         
         function endGame(won, msg) {

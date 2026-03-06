@@ -29,6 +29,16 @@ const guntherQuotes = [
     "Ach! My candy friend is kaput!"
 ];
 
+const holdingHandsQuotes = [
+    "LET GO! Ze danger is calling me!",
+    "You are hurting my hand! Also I vant to see ze lava!",
+    "HAHA! You cannot hold GUNTHER!",
+    "Look! Zey have CANDY! Let me GO!",
+    "Zis hand-holding is BORING!",
+    "I promise I vill not run. *crosses fingers*",
+    "Your hand is sweaty! I must escape!"
+];
+
 // Hazard positions along the 500m route
 const HAZARDS = [
     // Lava pits
@@ -58,7 +68,7 @@ class GameRoom {
         this.code = code;
         this.players = new Map();
         this.car = { x: 0, z: START_Z, rotation: 0 };
-        this.gunther = { x: 0, z: START_Z, state: 'in_car', visible: false, captorId: null, trapPos: null };
+        this.gunther = { x: 0, z: START_Z, state: 'in_car', visible: false, captorId: null, trapPos: null, holderId: null, strain: 0 };
         this.enemies = [];
         this.gameState = 'waiting';
         this.lastUpdate = Date.now();
@@ -130,6 +140,117 @@ class GameRoom {
                     this.gunther.z += (enemy.z - this.car.z) * 0.4;
                     this.lastQuote = "Ooh! Zat man has CANDY!";
                     break;
+                }
+            }
+        }
+        
+        // Gunther holding hands with a player
+        if (this.gunther.state === 'holding_hands' && this.gunther.holderId !== null) {
+            const holder = this.players.get(this.gunther.holderId);
+            if (!holder || holder.inCar) {
+                // Holder left or entered car, release
+                this.gunther.state = 'wandering';
+                this.gunther.holderId = null;
+                this.gunther.strain = 0;
+                this.lastQuote = "FREEDOM! Now vhere vas zat lava pit?";
+            } else {
+                // Find what Gunther wants to run toward
+                let nearestHazard = null;
+                let nearestDist = Infinity;
+                let pullStrength = 0;
+                
+                for (const h of HAZARDS) {
+                    const d = Math.hypot(this.gunther.x - h.x, this.gunther.z - h.z);
+                    if (d < nearestDist) {
+                        nearestDist = d;
+                        nearestHazard = h;
+                    }
+                }
+                
+                for (const e of this.enemies) {
+                    const d = Math.hypot(this.gunther.x - e.x, this.gunther.z - e.z);
+                    if (d < nearestDist * 0.6) {
+                        nearestDist = d;
+                        nearestHazard = { x: e.x, z: e.z, type: 'candy' };
+                    }
+                }
+                
+                // Calculate strain based on proximity to temptation
+                if (nearestHazard) {
+                    pullStrength = Math.max(0, 100 - nearestDist * 2);
+                    if (nearestHazard.type === 'candy') pullStrength *= 1.5;
+                }
+                
+                // Enemies nearby increase strain
+                for (const e of this.enemies) {
+                    const d = Math.hypot(this.gunther.x - e.x, this.gunther.z - e.z);
+                    if (d < 8) {
+                        pullStrength += (8 - d) * 3;
+                    }
+                }
+                
+                // Follow holder with resistance
+                const toHolder = {
+                    x: holder.x - this.gunther.x,
+                    z: holder.z - this.gunther.z
+                };
+                const followDist = Math.hypot(toHolder.x, toHolder.z);
+                
+                if (followDist > 2) {
+                    const norm = Math.hypot(toHolder.x, toHolder.z);
+                    const followSpeed = Math.min(6, followDist) * delta;
+                    this.gunther.x += (toHolder.x / norm) * followSpeed;
+                    this.gunther.z += (toHolder.z / norm) * followSpeed;
+                    
+                    // Also pull toward hazard based on strain
+                    if (nearestHazard && pullStrength > 20) {
+                        const toHazard = {
+                            x: nearestHazard.x - this.gunther.x,
+                            z: nearestHazard.z - this.gunther.z
+                        };
+                        const hazardDist = Math.hypot(toHazard.x, toHazard.z);
+                        if (hazardDist > 0) {
+                            this.gunther.x += (toHazard.x / hazardDist) * pullStrength * 0.01 * delta;
+                            this.gunther.z += (toHazard.z / hazardDist) * pullStrength * 0.01 * delta;
+                        }
+                    }
+                }
+                
+                // Keep arm's length
+                if (followDist < 1.5 && followDist > 0) {
+                    const norm = Math.hypot(toHolder.x, toHolder.z);
+                    this.gunther.x = holder.x - (toHolder.x / norm) * 1.5;
+                    this.gunther.z = holder.z - (toHolder.z / norm) * 1.5;
+                }
+                
+                // Update strain
+                this.gunther.strain = Math.min(100, this.gunther.strain + pullStrength * 0.3 * delta);
+                this.gunther.strain = Math.max(0, this.gunther.strain - 10 * delta);
+                
+                // Random struggle quotes
+                if (this.gunther.strain > 70 && Math.random() < 0.02) {
+                    this.lastQuote = holdingHandsQuotes[Math.floor(Math.random() * holdingHandsQuotes.length)];
+                }
+                
+                // Break free if strain too high!
+                if (this.gunther.strain >= 100) {
+                    this.gunther.state = 'wandering';
+                    this.gunther.holderId = null;
+                    this.gunther.strain = 0;
+                    this.lastQuote = "HAHA! You cannot hold GUNTHER!";
+                    
+                    // Sprint toward danger
+                    if (nearestHazard) {
+                        const toHazard = {
+                            x: nearestHazard.x - this.gunther.x,
+                            z: nearestHazard.z - this.gunther.z
+                        };
+                        const hazardDist = Math.hypot(toHazard.x, toHazard.z);
+                        if (hazardDist > 0) {
+                            this.gunther.x += (toHazard.x / hazardDist) * 3;
+                            this.gunther.z += (toHazard.z / hazardDist) * 3;
+                        }
+                    }
                 }
             }
         }
@@ -219,7 +340,10 @@ class GameRoom {
         
         // Enemy AI
         for (const enemy of this.enemies) {
-            if ((this.gunther.state === 'wandering' || this.gunther.state === 'trapped') && !enemy.hasGunther) {
+            const guntherVulnerable = this.gunther.state === 'wandering' || this.gunther.state === 'trapped';
+            const guntherHeld = this.gunther.state === 'holding_hands';
+            
+            if ((guntherVulnerable || guntherHeld) && !enemy.hasGunther) {
                 const dx = this.gunther.x - enemy.x;
                 const dz = this.gunther.z - enemy.z;
                 const dist = Math.hypot(dx, dz);
@@ -228,11 +352,14 @@ class GameRoom {
                     enemy.z += (dz / dist) * enemy.speed * delta;
                 }
                 
-                if (dist < 2) {
+                // Can only capture if NOT holding hands
+                if (dist < 2 && !guntherHeld) {
                     enemy.hasGunther = true;
                     this.gunther.state = 'captured';
                     this.gunther.captorId = enemy.id;
                     this.gunther.trapPos = null;
+                    this.gunther.holderId = null;
+                    this.gunther.strain = 0;
                     this.lastQuote = "Ooh! You have ze candies? I come viz you!";
                 }
             } else if (!enemy.hasGunther) {
@@ -273,16 +400,56 @@ class GameRoom {
         const player = this.players.get(playerId);
         if (!player || player.inCar) return false;
         
+        if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped' || this.gunther.state === 'holding_hands') {
+            const dist = Math.hypot(player.x - this.gunther.x, player.z - this.gunther.z);
+            // If holding hands, we can put him in car from further away
+            const grabDist = this.gunther.state === 'holding_hands' ? 6 : 4;
+            if (dist < grabDist) {
+                // Must be close to car too
+                const carDist = Math.hypot(player.x - this.car.x, player.z - this.car.z);
+                if (carDist < 8) {
+                    const wasTrapped = this.gunther.state === 'trapped';
+                    const wasHolding = this.gunther.state === 'holding_hands';
+                    this.gunther.state = 'in_car';
+                    this.gunther.visible = false;
+                    this.gunther.trapPos = null;
+                    this.gunther.holderId = null;
+                    this.gunther.strain = 0;
+                    this.lastQuote = wasTrapped ? "Ach! You freed me from ze fun snappy thing!" : 
+                                     wasHolding ? "NEIN! Not ze boring car again!" :
+                                     "Nein! Ze adventure vas just beginning!";
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    holdHand(playerId) {
+        const player = this.players.get(playerId);
+        if (!player || player.inCar) return false;
+        
         if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped') {
             const dist = Math.hypot(player.x - this.gunther.x, player.z - this.gunther.z);
             if (dist < 4) {
-                const wasTrapped = this.gunther.state === 'trapped';
-                this.gunther.state = 'in_car';
-                this.gunther.visible = false;
+                this.gunther.state = 'holding_hands';
+                this.gunther.holderId = playerId;
+                this.gunther.strain = 0;
                 this.gunther.trapPos = null;
-                this.lastQuote = wasTrapped ? "Ach! You freed me from ze fun snappy thing!" : "Nein! Ze adventure vas just beginning!";
+                this.lastQuote = "Ach! You are holding my hand! But I vant to EXPLORE!";
                 return true;
             }
+        }
+        return false;
+    }
+    
+    releaseHand(playerId) {
+        if (this.gunther.state === 'holding_hands' && this.gunther.holderId === playerId) {
+            this.gunther.state = 'wandering';
+            this.gunther.holderId = null;
+            this.gunther.strain = 0;
+            this.lastQuote = "FREEDOM! Now vhere vas zat lava pit?";
+            return true;
         }
         return false;
     }
@@ -433,6 +600,14 @@ io.on('connection', (socket) => {
     
     socket.on('grabGunther', () => {
         if (currentRoom) currentRoom.grabGunther(socket.id);
+    });
+    
+    socket.on('holdHand', () => {
+        if (currentRoom) currentRoom.holdHand(socket.id);
+    });
+    
+    socket.on('releaseHand', () => {
+        if (currentRoom) currentRoom.releaseHand(socket.id);
     });
     
     socket.on('shoot', (data) => {

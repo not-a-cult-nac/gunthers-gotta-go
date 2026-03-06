@@ -78,7 +78,7 @@ class GameRoom {
         
         // Debug config (can be adjusted via debug panel)
         this.config = {
-            escapeRate: 0.15,       // Probability per second of random escape (~every 7 seconds)
+            escapeRate: 0.05,       // Probability per second of random escape (~every 20 seconds)
             lureRange: 12,          // Distance at which enemies lure Gunther out
             enemySpeed: 3,          // Base enemy movement speed
             guntherSpeed: 3.5       // Gunther wander speed
@@ -317,8 +317,9 @@ class GameRoom {
             }
         }
         
-        // Gunther captured - captor runs away
+        // Gunther captured - captor runs away (holding his hand)
         if (this.gunther.state === 'captured' && this.gunther.captorId !== null) {
+            this.gunther.visible = true;  // Always visible when captured - enemy is holding his hand
             const captor = this.enemies.find(e => e.id === this.gunther.captorId);
             if (captor) {
                 const dx = captor.x - this.car.x;
@@ -328,7 +329,8 @@ class GameRoom {
                     captor.x += (dx / dist) * captor.speed * delta;
                     captor.z += (dz / dist) * captor.speed * delta;
                 }
-                this.gunther.x = captor.x;
+                // Gunther walks slightly behind/beside the captor
+                this.gunther.x = captor.x + 1;
                 this.gunther.z = captor.z;
                 
                 if (dist > 100) {

@@ -417,8 +417,20 @@
         ];
         
         function getTerrainHeight(x, z) {
-            // Flat terrain for now - hills can come later
-            return 0;
+            // Multi-layered noise for natural rolling hills
+            const bigHills = Math.sin(x * 0.015) * Math.cos(z * 0.012) * 6;
+            const mediumHills = Math.sin(x * 0.04 + 1) * Math.cos(z * 0.035) * 3;
+            const smallBumps = Math.sin(x * 0.08) * Math.sin(z * 0.09) * 1;
+            const variation = Math.sin((x + z) * 0.025) * 1.5;
+            
+            let height = bigHills + mediumHills + smallBumps + variation;
+            
+            // Keep a flatter path down the center for easier driving
+            const centerFlatness = Math.exp(-(x * x) / 600);
+            height *= (1 - centerFlatness * 0.7);
+            
+            // Ensure minimum height of 0
+            return Math.max(0, height);
         }
         
         // Socket handlers
@@ -666,12 +678,35 @@
         }
         
         function createTerrain() {
-            // Simple flat terrain
-            const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE + 200);
-            const mat = new THREE.MeshStandardMaterial({ color: 0x4a8505 });
+            // Hilly terrain with height-mapped geometry
+            const width = TERRAIN_SIZE;
+            const depth = TERRAIN_SIZE + 200;
+            const segmentsX = 80;
+            const segmentsZ = 100;
+            
+            const geo = new THREE.PlaneGeometry(width, depth, segmentsX, segmentsZ);
+            const positions = geo.attributes.position.array;
+            
+            // Apply height to each vertex
+            const offsetZ = (GOAL_Z + START_Z) / 2;
+            for (let i = 0; i < positions.length; i += 3) {
+                const x = positions[i];
+                const y = positions[i + 1]; // This becomes Z after rotation
+                const worldZ = y + offsetZ;
+                positions[i + 2] = getTerrainHeight(x, worldZ);
+            }
+            
+            geo.computeVertexNormals();
+            
+            // Gradient green material for more visual interest
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: 0x4a8505,
+                flatShading: false,
+            });
+            
             const terrain = new THREE.Mesh(geo, mat);
             terrain.rotation.x = -Math.PI / 2;
-            terrain.position.z = (GOAL_Z + START_Z) / 2;
+            terrain.position.z = offsetZ;
             terrain.receiveShadow = true;
             scene.add(terrain);
         }

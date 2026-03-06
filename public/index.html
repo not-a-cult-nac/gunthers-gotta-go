@@ -688,17 +688,18 @@
             const positions = geo.attributes.position.array;
             
             // Apply height to each vertex
+            // After rotation -90° around X: local Y becomes -world Z
             const offsetZ = (GOAL_Z + START_Z) / 2;
             for (let i = 0; i < positions.length; i += 3) {
-                const x = positions[i];
-                const y = positions[i + 1]; // This becomes Z after rotation
-                const worldZ = y + offsetZ;
-                positions[i + 2] = getTerrainHeight(x, worldZ);
+                const localX = positions[i];
+                const localY = positions[i + 1];
+                // World Z = -localY + offsetZ (due to rotation direction)
+                const worldZ = -localY + offsetZ;
+                positions[i + 2] = getTerrainHeight(localX, worldZ);
             }
             
             geo.computeVertexNormals();
             
-            // Gradient green material for more visual interest
             const mat = new THREE.MeshStandardMaterial({ 
                 color: 0x4a8505,
                 flatShading: false,

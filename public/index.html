@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <title>Gunther's Gotta Go - Multiplayer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -204,6 +204,75 @@
     <div id="instructions">
         CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | E Exit/Enter | SPACE Grab Gunther | H Hold Hand
     </div>
+    <!-- Mobile Touch Controls -->
+    <div id="mobile-controls" style="display: none;">
+        <!-- Left joystick for movement -->
+        <div id="joystick-zone" style="
+            position: absolute;
+            left: 20px;
+            bottom: 20px;
+            width: 150px;
+            height: 150px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.3);
+        ">
+            <div id="joystick-knob" style="
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                width: 60px;
+                height: 60px;
+                background: rgba(255,107,53,0.8);
+                border-radius: 50%;
+                border: 2px solid #fff;
+            "></div>
+        </div>
+        
+        <!-- Right side: camera drag zone (invisible) + action buttons -->
+        <div id="camera-zone" style="
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 50%;
+            height: 60%;
+        "></div>
+        
+        <!-- Action buttons -->
+        <div id="action-buttons" style="
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        ">
+            <button id="btn-shoot" class="mobile-btn" style="
+                width: 70px; height: 70px; border-radius: 50%;
+                background: #e74c3c; border: 3px solid #fff;
+                color: #fff; font-size: 12px; font-weight: bold;
+            ">SHOOT</button>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-action" class="mobile-btn" style="
+                    width: 70px; height: 70px; border-radius: 50%;
+                    background: #3498db; border: 3px solid #fff;
+                    color: #fff; font-size: 11px; font-weight: bold;
+                ">E<br>EXIT</button>
+                <button id="btn-grab" class="mobile-btn" style="
+                    width: 70px; height: 70px; border-radius: 50%;
+                    background: #2ecc71; border: 3px solid #fff;
+                    color: #fff; font-size: 11px; font-weight: bold;
+                ">GRAB</button>
+            </div>
+            <button id="btn-hold" class="mobile-btn" style="
+                width: 150px; height: 50px; border-radius: 25px;
+                background: #9b59b6; border: 3px solid #fff;
+                color: #fff; font-size: 12px; font-weight: bold;
+            ">🖐️ HOLD HAND</button>
+        </div>
+    </div>
+    
     <div id="strain-meter" style="
         position: absolute;
         bottom: 60px;
@@ -250,6 +319,16 @@
         let serverState = null;
         
         const keys = {};
+        
+        // Mobile detection and touch controls
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                        || ('ontouchstart' in window) 
+                        || (navigator.maxTouchPoints > 0);
+        
+        let touchMoveX = 0, touchMoveY = 0;
+        let joystickActive = false;
+        let cameraTouchId = null;
+        let lastCameraX = 0, lastCameraY = 0;
         let mouseX = 0, mouseY = 0;
         let carRotation = 0;
         let playerRotation = 0;
@@ -395,9 +474,16 @@
         socket.on('gameStarted', () => {
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('ui').style.display = 'block';
-            document.getElementById('crosshair').style.display = 'block';
-            document.getElementById('instructions').style.display = 'block';
-            document.body.requestPointerLock();
+            document.getElementById('crosshair').style.display = isMobile ? 'none' : 'block';
+            document.getElementById('instructions').style.display = isMobile ? 'none' : 'block';
+            
+            if (isMobile) {
+                document.getElementById('mobile-controls').style.display = 'block';
+                setupMobileControls();
+            } else {
+                document.body.requestPointerLock();
+            }
+            
             gameStarted = true;
             init();
         });
@@ -421,6 +507,137 @@
         });
         
         function startGame() { socket.emit('startGame'); }
+        
+        function setupMobileControls() {
+            const joystickZone = document.getElementById('joystick-zone');
+            const joystickKnob = document.getElementById('joystick-knob');
+            const cameraZone = document.getElementById('camera-zone');
+            const btnShoot = document.getElementById('btn-shoot');
+            const btnAction = document.getElementById('btn-action');
+            const btnGrab = document.getElementById('btn-grab');
+            const btnHold = document.getElementById('btn-hold');
+            
+            // Joystick for movement
+            joystickZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                joystickActive = true;
+            }, { passive: false });
+            
+            joystickZone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!joystickActive) return;
+                
+                const touch = e.touches[0];
+                const rect = joystickZone.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let dx = touch.clientX - centerX;
+                let dy = touch.clientY - centerY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const maxDist = rect.width / 2 - 30;
+                
+                if (dist > maxDist) {
+                    dx = (dx / dist) * maxDist;
+                    dy = (dy / dist) * maxDist;
+                }
+                
+                joystickKnob.style.left = `calc(50% + ${dx}px)`;
+                joystickKnob.style.top = `calc(50% + ${dy}px)`;
+                
+                // Normalize to -1 to 1
+                touchMoveX = dx / maxDist;
+                touchMoveY = dy / maxDist;
+                
+                // Set virtual keys
+                keys['KeyW'] = touchMoveY < -0.3;
+                keys['KeyS'] = touchMoveY > 0.3;
+                keys['KeyA'] = touchMoveX < -0.3;
+                keys['KeyD'] = touchMoveX > 0.3;
+            }, { passive: false });
+            
+            const resetJoystick = () => {
+                joystickActive = false;
+                joystickKnob.style.left = '50%';
+                joystickKnob.style.top = '50%';
+                touchMoveX = 0;
+                touchMoveY = 0;
+                keys['KeyW'] = false;
+                keys['KeyS'] = false;
+                keys['KeyA'] = false;
+                keys['KeyD'] = false;
+            };
+            
+            joystickZone.addEventListener('touchend', resetJoystick);
+            joystickZone.addEventListener('touchcancel', resetJoystick);
+            
+            // Camera control (right side of screen)
+            cameraZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                cameraTouchId = touch.identifier;
+                lastCameraX = touch.clientX;
+                lastCameraY = touch.clientY;
+            }, { passive: false });
+            
+            cameraZone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                for (let i = 0; i < e.touches.length; i++) {
+                    const touch = e.touches[i];
+                    if (touch.identifier === cameraTouchId) {
+                        const dx = touch.clientX - lastCameraX;
+                        const dy = touch.clientY - lastCameraY;
+                        mouseX += dx * 0.005;
+                        mouseY += dy * 0.005;
+                        mouseY = Math.max(-1, Math.min(1, mouseY));
+                        lastCameraX = touch.clientX;
+                        lastCameraY = touch.clientY;
+                    }
+                }
+            }, { passive: false });
+            
+            cameraZone.addEventListener('touchend', () => { cameraTouchId = null; });
+            
+            // Action buttons
+            btnShoot.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (socket && gameStarted) {
+                    const camDir = new THREE.Vector3(0, 0, -1);
+                    camDir.applyQuaternion(camera.quaternion);
+                    const pos = isInCar ? car.position : player.position;
+                    socket.emit('shoot', { x: pos.x, z: pos.z, dirX: camDir.x, dirZ: camDir.z });
+                }
+            }, { passive: false });
+            
+            btnAction.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys['KeyE'] = true;
+                setTimeout(() => { keys['KeyE'] = false; }, 100);
+            }, { passive: false });
+            
+            btnGrab.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (socket) socket.emit('grabGunther');
+            }, { passive: false });
+            
+            btnHold.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (socket) {
+                    if (guntherHoldingHands) {
+                        socket.emit('releaseHand');
+                    } else {
+                        socket.emit('holdHand');
+                    }
+                }
+            }, { passive: false });
+            
+            // Update hold button text based on state
+            setInterval(() => {
+                btnHold.textContent = guntherHoldingHands ? '✋ RELEASE' : '🖐️ HOLD HAND';
+                btnHold.style.background = guntherHoldingHands ? '#e67e22' : '#9b59b6';
+                btnAction.innerHTML = isInCar ? 'E<br>EXIT' : 'E<br>ENTER';
+            }, 200);
+        }
         
         function init() {
             scene = new THREE.Scene();
@@ -951,7 +1168,7 @@
         }
         
         document.addEventListener('pointerlockchange', () => {
-            if (!document.pointerLockElement && gameStarted) {
+            if (!document.pointerLockElement && gameStarted && !isMobile) {
                 document.body.requestPointerLock();
             }
         });

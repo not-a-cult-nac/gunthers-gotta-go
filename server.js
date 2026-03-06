@@ -357,6 +357,7 @@ class GameRoom {
                     enemy.hasGunther = true;
                     this.gunther.state = 'captured';
                     this.gunther.captorId = enemy.id;
+                    this.gunther.visible = true;  // Stay visible - enemy is holding his hand!
                     this.gunther.trapPos = null;
                     this.gunther.holderId = null;
                     this.gunther.strain = 0;
@@ -594,7 +595,17 @@ io.on('connection', (socket) => {
         const player = currentRoom.players.get(socket.id);
         if (player) {
             const dist = Math.hypot(player.x - currentRoom.car.x, player.z - currentRoom.car.z);
-            if (dist < 6) player.inCar = true;
+            if (dist < 6) {
+                player.inCar = true;
+                // If holding Gunther's hand, bring him into the car!
+                if (currentRoom.gunther.state === 'holding_hands' && currentRoom.gunther.holderId === socket.id) {
+                    currentRoom.gunther.state = 'in_car';
+                    currentRoom.gunther.visible = false;
+                    currentRoom.gunther.holderId = null;
+                    currentRoom.gunther.strain = 0;
+                    currentRoom.lastQuote = "NEIN! You tricked me into ze boring car!";
+                }
+            }
         }
     });
     

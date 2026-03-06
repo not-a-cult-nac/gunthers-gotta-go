@@ -202,7 +202,7 @@
     </div>
     
     <div id="instructions">
-        CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | E Exit/Enter | SPACE Grab Gunther | H Hold Hand
+        CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | E Exit/Enter | SPACE Hold/Release Hand
     </div>
     <!-- Mobile Touch Controls -->
     <div id="mobile-controls" style="display: none;">
@@ -259,17 +259,12 @@
                     background: #3498db; border: 3px solid #fff;
                     color: #fff; font-size: 11px; font-weight: bold;
                 ">E<br>EXIT</button>
-                <button id="btn-grab" class="mobile-btn" style="
+                <button id="btn-hold" class="mobile-btn" style="
                     width: 70px; height: 70px; border-radius: 50%;
                     background: #2ecc71; border: 3px solid #fff;
                     color: #fff; font-size: 11px; font-weight: bold;
-                ">GRAB</button>
+                ">🖐️<br>HOLD</button>
             </div>
-            <button id="btn-hold" class="mobile-btn" style="
-                width: 150px; height: 50px; border-radius: 25px;
-                background: #9b59b6; border: 3px solid #fff;
-                color: #fff; font-size: 12px; font-weight: bold;
-            ">🖐️ HOLD HAND</button>
         </div>
     </div>
     
@@ -514,7 +509,6 @@
             const cameraZone = document.getElementById('camera-zone');
             const btnShoot = document.getElementById('btn-shoot');
             const btnAction = document.getElementById('btn-action');
-            const btnGrab = document.getElementById('btn-grab');
             const btnHold = document.getElementById('btn-hold');
             
             // Joystick for movement
@@ -613,11 +607,6 @@
                 e.preventDefault();
                 keys['KeyE'] = true;
                 setTimeout(() => { keys['KeyE'] = false; }, 100);
-            }, { passive: false });
-            
-            btnGrab.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                if (socket) socket.emit('grabGunther');
             }, { passive: false });
             
             btnHold.addEventListener('touchstart', (e) => {
@@ -1124,21 +1113,15 @@
             }
             keys['KeyE_prev'] = keys['KeyE'];
             
-            // SPACE to grab
+            // SPACE to hold/release Gunther's hand
             if (keys['Space'] && !keys['Space_prev'] && !isInCar) {
-                socket.emit('grabGunther');
-            }
-            keys['Space_prev'] = keys['Space'];
-            
-            // Hold hand with H key
-            if (keys['KeyH'] && !keys['KeyH_prev'] && !isInCar) {
                 if (guntherHoldingHands) {
                     socket.emit('releaseHand');
                 } else {
                     socket.emit('holdHand');
                 }
             }
-            keys['KeyH_prev'] = keys['KeyH'];
+            keys['Space_prev'] = keys['Space'];
         }
         
         function endGame(won, msg) {

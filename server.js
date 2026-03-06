@@ -65,6 +65,22 @@ class GameRoom {
         this.enemyIdCounter = 0;
         this.lastQuote = '';
         this.loseReason = '';
+        
+        // Debug config (can be adjusted via debug panel)
+        this.config = {
+            escapeRate: 0.025,      // Probability per second of random escape
+            lureRange: 12,          // Distance at which enemies lure Gunther out
+            enemySpeed: 3,          // Base enemy movement speed
+            guntherSpeed: 3.5       // Gunther wander speed
+        };
+    }
+    
+    updateConfig(newConfig) {
+        if (newConfig.escapeRate !== undefined) this.config.escapeRate = newConfig.escapeRate;
+        if (newConfig.lureRange !== undefined) this.config.lureRange = newConfig.lureRange;
+        if (newConfig.enemySpeed !== undefined) this.config.enemySpeed = newConfig.enemySpeed;
+        if (newConfig.guntherSpeed !== undefined) this.config.guntherSpeed = newConfig.guntherSpeed;
+        console.log('Config updated:', this.config);
     }
     
     start() {
@@ -81,13 +97,14 @@ class GameRoom {
         const maxZ = Math.min(GOAL_Z - 30, this.car.z + 80);
         
         const side = Math.random() > 0.5 ? 1 : -1;
+        const baseSpeed = this.config.enemySpeed;
         const enemy = {
             id: this.enemyIdCounter++,
-            x: side * (20 + Math.random() * 25),  // Closer to path
+            x: side * (20 + Math.random() * 25),
             z: minZ + Math.random() * (maxZ - minZ),
             health: 2,
             hasGunther: false,
-            speed: 3 + Math.random() * 2  // Slightly faster
+            speed: baseSpeed + Math.random() * (baseSpeed * 0.5)  // Base + up to 50% variance
         };
         this.enemies.push(enemy);
         return enemy;
@@ -98,16 +115,16 @@ class GameRoom {
         
         // Gunther escapes from car
         if (this.gunther.state === 'in_car') {
-            // Random escape - roughly every 45-60 seconds on average
-            if (Math.random() < 0.025 * delta) {
+            // Random escape - controlled by escapeRate
+            if (Math.random() < this.config.escapeRate * delta) {
                 this.releaseGunther();
                 this.lastQuote = guntherQuotes[Math.floor(Math.random() * guntherQuotes.length)];
             }
             
-            // Escapes toward nearby enemies (only if they get really close)
+            // Escapes toward nearby enemies (controlled by lureRange)
             for (const enemy of this.enemies) {
                 const dist = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
-                if (dist < 12) {
+                if (dist < this.config.lureRange) {
                     this.releaseGunther();
                     this.gunther.x += (enemy.x - this.car.x) * 0.4;
                     this.gunther.z += (enemy.z - this.car.z) * 0.4;
@@ -144,8 +161,8 @@ class GameRoom {
                 const dz = nearestHazard.z - this.gunther.z;
                 const dist = Math.hypot(dx, dz);
                 if (dist > 0.5) {
-                    this.gunther.x += (dx / dist) * 3.5 * delta;
-                    this.gunther.z += (dz / dist) * 3.5 * delta;
+                    this.gunther.x += (dx / dist) * this.config.guntherSpeed * delta;
+                    this.gunther.z += (dz / dist) * this.config.guntherSpeed * delta;
                 }
                 
                 // Check hazard
@@ -422,6 +439,13 @@ io.on('connection', (socket) => {
         if (!currentRoom) return;
         const result = currentRoom.shoot(socket.id, data.x, data.z, data.dirX, data.dirZ);
         if (result) io.to(currentRoom.code).emit('enemyHit', result);
+    });
+    
+    socket.on('debugConfig', (config) => {
+        if (!currentRoom) return;
+        currentRoom.updateConfig(config);
+        // Broadcast config change to all players in room
+        io.to(currentRoom.code).emit('configUpdated', currentRoom.config);
     });
     
     socket.on('disconnect', () => {

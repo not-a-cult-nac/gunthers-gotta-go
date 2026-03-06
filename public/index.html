@@ -75,6 +75,58 @@
             margin-top: 25px; padding: 18px 50px; font-size: 22px;
             background: #fff; border: none; color: #333; cursor: pointer;
         }
+        
+        /* Debug Panel */
+        #debug-panel {
+            position: absolute;
+            top: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 400px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #ff6b35;
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            padding: 15px;
+            z-index: 200;
+            transition: top 0.3s ease;
+            font-size: 14px;
+            color: #fff;
+        }
+        #debug-panel.open {
+            top: 0;
+        }
+        #debug-panel h3 {
+            color: #ff6b35;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .debug-row label {
+            flex: 1;
+        }
+        .debug-row input[type="range"] {
+            width: 150px;
+            margin: 0 10px;
+        }
+        .debug-row .value {
+            width: 50px;
+            text-align: right;
+            color: #00ff88;
+            font-family: monospace;
+        }
+        #debug-panel .hint {
+            color: #888;
+            font-size: 11px;
+            text-align: center;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -123,6 +175,32 @@
     </div>
     <div id="gunther-speech"></div>
     <div id="crosshair"></div>
+    
+    <div id="debug-panel">
+        <h3>🔧 DEBUG PANEL (~)</h3>
+        <div class="debug-row">
+            <label>Gunther Escape Rate</label>
+            <input type="range" id="debug-escape-rate" min="0" max="100" value="25">
+            <span class="value" id="debug-escape-rate-val">0.025</span>
+        </div>
+        <div class="debug-row">
+            <label>Enemy Lure Range</label>
+            <input type="range" id="debug-lure-range" min="5" max="50" value="12">
+            <span class="value" id="debug-lure-range-val">12</span>
+        </div>
+        <div class="debug-row">
+            <label>Enemy Speed</label>
+            <input type="range" id="debug-enemy-speed" min="1" max="10" value="3" step="0.5">
+            <span class="value" id="debug-enemy-speed-val">3.0</span>
+        </div>
+        <div class="debug-row">
+            <label>Gunther Wander Speed</label>
+            <input type="range" id="debug-gunther-speed" min="1" max="10" value="3.5" step="0.5">
+            <span class="value" id="debug-gunther-speed-val">3.5</span>
+        </div>
+        <p class="hint">Changes sync to server in real-time</p>
+    </div>
+    
     <div id="instructions">
         CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | E Exit/Enter | SPACE Grab Gunther
     </div>
@@ -150,6 +228,71 @@
         const GOAL_Z = 440;
         const START_Z = -60;
         const TERRAIN_SIZE = 600;
+        
+        // Debug panel state
+        let debugPanelOpen = false;
+        const debugConfig = {
+            escapeRate: 0.025,
+            lureRange: 12,
+            enemySpeed: 3,
+            guntherSpeed: 3.5
+        };
+        
+        function setupDebugPanel() {
+            const panel = document.getElementById('debug-panel');
+            
+            // Toggle with ~ key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === '`' || e.key === '~') {
+                    debugPanelOpen = !debugPanelOpen;
+                    panel.classList.toggle('open', debugPanelOpen);
+                    e.preventDefault();
+                }
+            });
+            
+            // Escape rate slider
+            const escapeSlider = document.getElementById('debug-escape-rate');
+            const escapeVal = document.getElementById('debug-escape-rate-val');
+            escapeSlider.addEventListener('input', () => {
+                debugConfig.escapeRate = escapeSlider.value / 1000;
+                escapeVal.textContent = debugConfig.escapeRate.toFixed(3);
+                sendDebugConfig();
+            });
+            
+            // Lure range slider
+            const lureSlider = document.getElementById('debug-lure-range');
+            const lureVal = document.getElementById('debug-lure-range-val');
+            lureSlider.addEventListener('input', () => {
+                debugConfig.lureRange = parseInt(lureSlider.value);
+                lureVal.textContent = debugConfig.lureRange;
+                sendDebugConfig();
+            });
+            
+            // Enemy speed slider
+            const enemySlider = document.getElementById('debug-enemy-speed');
+            const enemyVal = document.getElementById('debug-enemy-speed-val');
+            enemySlider.addEventListener('input', () => {
+                debugConfig.enemySpeed = parseFloat(enemySlider.value);
+                enemyVal.textContent = debugConfig.enemySpeed.toFixed(1);
+                sendDebugConfig();
+            });
+            
+            // Gunther speed slider
+            const guntherSlider = document.getElementById('debug-gunther-speed');
+            const guntherVal = document.getElementById('debug-gunther-speed-val');
+            guntherSlider.addEventListener('input', () => {
+                debugConfig.guntherSpeed = parseFloat(guntherSlider.value);
+                guntherVal.textContent = debugConfig.guntherSpeed.toFixed(1);
+                sendDebugConfig();
+            });
+        }
+        
+        function sendDebugConfig() {
+            socket.emit('debugConfig', debugConfig);
+        }
+        
+        // Initialize debug panel on load
+        document.addEventListener('DOMContentLoaded', setupDebugPanel);
         
         // Hazards (must match server)
         const HAZARDS = [

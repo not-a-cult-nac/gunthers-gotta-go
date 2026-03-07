@@ -31,7 +31,7 @@ const AutoplayController = {
     AIM_SPEED: 15,             // Maximum aiming speed
     PRIORITY_RANGE: 40,        // Prioritize enemies this close
     SAFE_EXIT_RANGE: 60,       // Only exit car if ALL enemies are this far
-    AIM_TOLERANCE: 0.6,        // Wide aim tolerance - spray bullets!
+    AIM_TOLERANCE: 0.08,       // Tight aim - ~5° at most (was 0.6 = 34°!)
     
     init() {
         console.log('[Autoplay] Controller initialized');

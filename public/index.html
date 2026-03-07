@@ -468,9 +468,11 @@
         }
         
         socket.on('roomCreated', (data) => {
+            console.log('roomCreated event received:', data);
             playerId = data.playerId;
             myPlayerId = data.playerId;
             isDriver = data.isDriver;
+            console.log('isDriver set to:', isDriver);
             document.getElementById('main-menu').style.display = 'none';
             document.getElementById('waiting-room').style.display = 'flex';
             document.getElementById('room-code-display').textContent = data.code;

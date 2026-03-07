@@ -5,6 +5,8 @@ const AutoplayController = {
     enabled: false,
     lastState: null,
     lastShootTime: 0,
+    debugLog: true,  // Enable debug logging
+    lastDebugTime: 0,
     
     // Tuning - aggressive shooting, conservative rescue
     SHOOT_RANGE: 50,           // Shoot enemies from further away
@@ -32,6 +34,12 @@ const AutoplayController = {
     },
     
     updateState(state) {
+        // Log Gunther state changes
+        if (this.lastState && state.gunther && this.lastState.gunther) {
+            if (this.lastState.gunther.state !== state.gunther.state) {
+                console.log(`[AI] Gunther state changed: ${this.lastState.gunther.state} -> ${state.gunther.state}`);
+            }
+        }
         this.lastState = state;
     },
     
@@ -96,6 +104,7 @@ const AutoplayController = {
                 const distToGunther = Math.hypot(e.x - gunther.x, e.z - gunther.z);
                 if (distToGunther < 8) {
                     priority = -5000 + distToGunther;  // Closer to Gunther = higher priority
+                    if (this.debugLog) console.log(`[AI] CRITICAL: Enemy ${e.id} is ${distToGunther.toFixed(1)} from wandering Gunther!`);
                 } else if (distToGunther < 15) {
                     priority = -1000 + distToGunther;
                 } else if (distToGunther < 25) {
@@ -117,11 +126,18 @@ const AutoplayController = {
             }
         }
         
-        if (!target) return false;
+        if (!target) {
+            if (this.debugLog && performance.now() - this.lastDebugTime > 2000) {
+                console.log('[AI] No targets in range');
+                this.lastDebugTime = performance.now();
+            }
+            return false;
+        }
         
         // Aim at target
         const targetAngle = Math.atan2(target.x - car.x, target.z - car.z);
         const angleDiff = this.normalizeAngle(targetAngle - carRotation);
+        const distToTarget = Math.hypot(target.x - car.x, target.z - car.z);
         
         // Aggressive turning toward target
         GameInput.moveSide = -Math.sign(angleDiff) * Math.min(Math.abs(angleDiff) * 3, 1.0);
@@ -131,6 +147,12 @@ const AutoplayController = {
         if (Math.abs(angleDiff) < 0.4 && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
             GameInput.triggerAction('shoot');
             this.lastShootTime = now;
+            if (this.debugLog) {
+                console.log(`[AI] SHOOTING at enemy ${target.id} (dist=${distToTarget.toFixed(1)}, angle=${angleDiff.toFixed(2)}, priority=${targetPriority.toFixed(0)})`);
+            }
+        } else if (this.debugLog && now - this.lastDebugTime > 1000) {
+            console.log(`[AI] Aiming at enemy ${target.id} (dist=${distToTarget.toFixed(1)}, angle=${angleDiff.toFixed(2)}, priority=${targetPriority.toFixed(0)})`);
+            this.lastDebugTime = now;
         }
         
         // Keep moving forward while shooting

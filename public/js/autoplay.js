@@ -180,8 +180,8 @@ const AutoplayController = {
             this.driveTowardGoal(carRotation, gunther, car);
             
         } else {
-            // On foot - SHOOT!
-            const shotFired = this.shootEnemies(enemies, player, playerRotation);
+            // On foot - SHOOT! Prioritize enemies near Gunther
+            const shotFired = this.shootEnemies(enemies, player, playerRotation, gunther);
             
             // If no threats left, get back in car
             if (isSafe && !shotFired) {
@@ -209,13 +209,13 @@ const AutoplayController = {
         return Math.min(...enemies.map(e => Math.hypot(e.x - x, e.z - z)));
     },
     
-    shootEnemies(enemies, player, playerRotation) {
+    shootEnemies(enemies, player, playerRotation, gunther) {
         if (!enemies || !enemies.length || !player) return false;
         
         const now = performance.now();
         if (now - this.lastShootTime < this.SHOOT_COOLDOWN) return false;
         
-        // Find best target
+        // Find best target - prioritize enemies near Gunther!
         let bestEnemy = null;
         let bestScore = -Infinity;
         
@@ -229,8 +229,19 @@ const AutoplayController = {
             const angleToEnemy = Math.atan2(dx, dz);
             const angleDiff = Math.abs(this.normalizeAngle(angleToEnemy - playerRotation));
             
-            // Score: prefer close enemies we're already aiming at
-            const score = -dist - angleDiff * 20;
+            // Score: prefer enemies near Gunther, then close to player, then already aimed at
+            let score = -dist - angleDiff * 10;
+            
+            // HUGE bonus for enemies near Gunther (the one who matters!)
+            if (gunther && (gunther.state === 'wandering' || gunther.state === 'trapped')) {
+                const distToGunther = Math.hypot(e.x - gunther.x, e.z - gunther.z);
+                if (distToGunther < 15) score += 500;  // Massive priority
+                else if (distToGunther < 25) score += 200;
+            }
+            
+            // Bonus if this enemy has Gunther captured
+            if (e.hasGunther) score += 1000;
+            
             if (score > bestScore) {
                 bestScore = score;
                 bestEnemy = { enemy: e, dist, angleToEnemy, angleDiff };
@@ -241,9 +252,11 @@ const AutoplayController = {
         
         const { enemy, dist, angleToEnemy, angleDiff } = bestEnemy;
         
-        // Aim toward enemy
+        // Aim toward enemy - SMOOTH aiming, not flip-flopping!
         const aimDir = this.normalizeAngle(angleToEnemy - playerRotation);
-        GameInput.aimX = Math.sign(aimDir) * Math.min(Math.abs(aimDir) * 5, 0.1);
+        // Proportional control: turn faster when far off, slower when close
+        // Cap at 0.08 to prevent overshooting
+        GameInput.aimX = Math.max(-0.08, Math.min(0.08, aimDir * 0.3));
         
         // Shoot if aimed well enough
         if (angleDiff < this.AIM_TOLERANCE) {
@@ -253,7 +266,7 @@ const AutoplayController = {
             return true;
         } else {
             if (this.debugLog && now - this.lastDebugTime > 500) {
-                console.log(`[AI] Aiming... angleDiff=${angleDiff.toFixed(2)}`);
+                console.log(`[AI] Aiming at enemy dist=${dist.toFixed(0)}, angleDiff=${angleDiff.toFixed(2)}`);
             }
         }
         

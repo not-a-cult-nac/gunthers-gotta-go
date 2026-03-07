@@ -1063,9 +1063,9 @@
         }
         
         function updateFromServer(state) {
-            // Car - only update from server if we're NOT in the car (let driver be authoritative)
+            // Car - only update from server if we're NOT the driver (passengers and spectators sync from server)
             if (car && state.car) {
-                if (!isInCar) {
+                if (!isDriver) {
                     // Not driving - accept server position
                     car.position.x = state.car.x;
                     car.position.z = state.car.z;

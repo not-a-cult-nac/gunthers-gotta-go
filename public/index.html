@@ -1244,9 +1244,11 @@
                 console.log('Players:', state.players.map(p => ({ id: p.id.slice(-4), inCar: p.inCar, me: p.id === myPlayerId })));
             }
             
-            // Render other players
+            // Render all players (including self when in car)
             for (const p of state.players) {
-                if (p.id === myPlayerId) continue;  // Don't render self
+                const isSelf = p.id === myPlayerId;
+                // Skip rendering self when on foot (would be weird), but show self when in car
+                if (isSelf && !p.inCar) continue;
                 
                 let mesh = otherPlayers.get(p.id);
                 if (!mesh) {

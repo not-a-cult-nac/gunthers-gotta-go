@@ -329,9 +329,21 @@ const AutoplayController = {
         const angle = Math.atan2(dx, dz);
         const relAngle = this.normalizeAngle(angle - rotation);
         
-        // Move toward target
-        GameInput.moveForward = Math.cos(relAngle) > 0 ? 1 : -0.3;
-        GameInput.moveSide = Math.sin(relAngle) > 0.2 ? 0.5 : (Math.sin(relAngle) < -0.2 ? -0.5 : 0);
+        // If target is mostly in front, run forward
+        // If target is to the side or behind, strafe/turn aggressively
+        const cosAngle = Math.cos(relAngle);
+        const sinAngle = Math.sin(relAngle);
+        
+        // Always move forward if target is remotely in front
+        GameInput.moveForward = cosAngle > -0.3 ? 1 : 0;
+        
+        // Strafe toward target
+        if (Math.abs(sinAngle) > 0.1) {
+            GameInput.moveSide = sinAngle > 0 ? 1 : -1;  // Full strafe, not half
+        }
+        
+        // Also turn toward target (helps camera/aim follow)
+        GameInput.aimX = Math.max(-0.1, Math.min(0.1, sinAngle * 0.5));
     },
     
     normalizeAngle(angle) {

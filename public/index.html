@@ -331,6 +331,60 @@
         
         const keys = {};
         
+        // Input abstraction - semantic actions instead of raw keys
+        const actions = {
+            moveForward: false,
+            moveBackward: false,
+            moveLeft: false,
+            moveRight: false,
+            turnLeft: false,
+            turnRight: false,
+            interact: false,      // E - enter/exit vehicle
+            holdHand: false,      // Space - grab/release Gunther
+            shoot: false,         // Mouse click
+        };
+        
+        // Map raw inputs to actions (call this each frame)
+        function updateActions() {
+            actions.moveForward = keys['KeyW'] || keys['ArrowUp'] || false;
+            actions.moveBackward = keys['KeyS'] || keys['ArrowDown'] || false;
+            actions.moveLeft = keys['KeyA'] || keys['ArrowLeft'] || false;
+            actions.moveRight = keys['KeyD'] || keys['ArrowRight'] || false;
+            actions.turnLeft = keys['KeyA'] || keys['ArrowLeft'] || false;
+            actions.turnRight = keys['KeyD'] || keys['ArrowRight'] || false;
+            actions.interact = keys['KeyE'] || false;
+            actions.holdHand = keys['Space'] || false;
+            // shoot is handled separately via mouse
+        }
+        
+        // Programmatic input for testing/AI
+        window.setAction = function(action, value) {
+            if (action in actions) {
+                actions[action] = value;
+                return true;
+            }
+            return false;
+        };
+        
+        // Simulate a button press (auto-releases after delay)
+        window.pressAction = function(action, durationMs = 100) {
+            if (action in actions) {
+                actions[action] = true;
+                setTimeout(() => { actions[action] = false; }, durationMs);
+                return true;
+            }
+            return false;
+        };
+        
+        // Hold an action for continuous input (returns release function)
+        window.holdAction = function(action) {
+            if (action in actions) {
+                actions[action] = true;
+                return () => { actions[action] = false; };
+            }
+            return null;
+        };
+        
         // Mobile detection and touch controls
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
                         || ('ontouchstart' in window) 
@@ -1319,22 +1373,25 @@
         function updateControls(delta) {
             if (!gameStarted || !car) return;
             
+            // Update action state from raw inputs
+            updateActions();
+            
             if (isInCar) {
                 // Only the driver can control the car
                 if (isDriver) {
                     const driveSpeed = 12 * delta;
                     const turnSpeed = 2 * delta;
                     
-                    if (keys['KeyA']) carRotation += turnSpeed;
-                    if (keys['KeyD']) carRotation -= turnSpeed;
+                    if (actions.turnLeft) carRotation += turnSpeed;
+                    if (actions.turnRight) carRotation -= turnSpeed;
                     
                     const forward = new THREE.Vector3(Math.sin(carRotation), 0, Math.cos(carRotation));
                     
-                    if (keys['KeyW']) {
+                    if (actions.moveForward) {
                         car.position.x += forward.x * driveSpeed;
                         car.position.z += forward.z * driveSpeed;
                     }
-                    if (keys['KeyS']) {
+                    if (actions.moveBackward) {
                         car.position.x -= forward.x * driveSpeed * 0.5;
                         car.position.z -= forward.z * driveSpeed * 0.5;
                     }
@@ -1359,10 +1416,10 @@
                 const forward = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
                 const right = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
                 
-                if (keys['KeyW']) { player.position.x += forward.x * runSpeed; player.position.z += forward.z * runSpeed; }
-                if (keys['KeyS']) { player.position.x -= forward.x * runSpeed; player.position.z -= forward.z * runSpeed; }
-                if (keys['KeyA']) { player.position.x += right.x * runSpeed; player.position.z += right.z * runSpeed; }
-                if (keys['KeyD']) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
+                if (actions.moveForward) { player.position.x += forward.x * runSpeed; player.position.z += forward.z * runSpeed; }
+                if (actions.moveBackward) { player.position.x -= forward.x * runSpeed; player.position.z -= forward.z * runSpeed; }
+                if (actions.moveLeft) { player.position.x += right.x * runSpeed; player.position.z += right.z * runSpeed; }
+                if (actions.moveRight) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
                 
                 player.position.y = getTerrainHeight(player.position.x, player.position.z);
                 player.rotation.y = playerRotation;
@@ -1376,7 +1433,7 @@
             }
             
             // E to exit/enter
-            if (keys['KeyE'] && !keys['KeyE_prev']) {
+            if (actions.interact && !actions.interact_prev) {
                 if (isInCar) {
                     isInCar = false;
                     player.visible = true;
@@ -1395,17 +1452,17 @@
                     }
                 }
             }
-            keys['KeyE_prev'] = keys['KeyE'];
+            actions.interact_prev = actions.interact;
             
             // SPACE to hold/release Gunther's hand
-            if (keys['Space'] && !keys['Space_prev'] && !isInCar) {
+            if (actions.holdHand && !actions.holdHand_prev && !isInCar) {
                 if (guntherHoldingHands) {
                     socket.emit('releaseHand');
                 } else {
                     socket.emit('holdHand');
                 }
             }
-            keys['Space_prev'] = keys['Space'];
+            actions.holdHand_prev = actions.holdHand;
         }
         
         function endGame(won, msg) {

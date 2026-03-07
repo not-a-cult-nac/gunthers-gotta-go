@@ -97,8 +97,9 @@ const AutoplayController = {
         let targetPriority = Infinity;
         
         // Reference point: where should we defend?
-        const defendX = (gunther && gunther.state === 'wandering') ? gunther.x : car.x;
-        const defendZ = (gunther && gunther.state === 'wandering') ? gunther.z : car.z;
+        const guntherNeedsRescue = gunther && (gunther.state === 'wandering' || gunther.state === 'trapped');
+        const defendX = guntherNeedsRescue ? gunther.x : car.x;
+        const defendZ = guntherNeedsRescue ? gunther.z : car.z;
         
         for (const e of enemies) {
             const distToCar = Math.hypot(e.x - car.x, e.z - car.z);
@@ -112,12 +113,12 @@ const AutoplayController = {
             if (e.hasGunther) {
                 priority = -10000;
             }
-            // Enemy very close to loose Gunther = critical
-            else if (gunther && gunther.state === 'wandering') {
+            // Enemy very close to vulnerable Gunther (wandering or trapped) = critical
+            else if (guntherNeedsRescue) {
                 const distToGunther = Math.hypot(e.x - gunther.x, e.z - gunther.z);
                 if (distToGunther < 8) {
                     priority = -5000 + distToGunther;  // Closer to Gunther = higher priority
-                    if (this.debugLog) console.log(`[AI] CRITICAL: Enemy ${e.id} is ${distToGunther.toFixed(1)} from wandering Gunther!`);
+                    if (this.debugLog) console.log(`[AI] CRITICAL: Enemy ${e.id} is ${distToGunther.toFixed(1)} from vulnerable Gunther!`);
                 } else if (distToGunther < 15) {
                     priority = -1000 + distToGunther;
                 } else if (distToGunther < 25) {
@@ -183,8 +184,9 @@ const AutoplayController = {
         
         if (!gunther) return false;
         
-        // Only rescue if Gunther is wandering (not captured - we shoot for that)
-        if (gunther.state !== 'wandering') return false;
+        // Handle rescue for wandering OR trapped Gunther
+        // (captured = shoot the enemy holding him, not rescue)
+        if (gunther.state !== 'wandering' && gunther.state !== 'trapped') return false;
         
         // CRITICAL: Check if area is COMPLETELY safe before considering exit
         if (enemies && car) {

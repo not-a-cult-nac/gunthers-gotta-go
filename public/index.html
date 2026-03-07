@@ -1482,12 +1482,34 @@
         }
         
         let lastTime = 0;
+        // Update in-car player positions every frame (prevents judder)
+        function updateInCarPositions() {
+            if (!serverState) return;
+            for (const p of serverState.players) {
+                if (!p.inCar) continue;
+                const mesh = otherPlayers.get(p.id);
+                if (!mesh) continue;
+                const seatIdx = seatOccupants[p.id];
+                if (seatIdx === undefined) continue;
+                
+                const seat = SEAT_POSITIONS[seatIdx];
+                const worldPos = new THREE.Vector3(seat.x, seat.y, seat.z);
+                worldPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y);
+                worldPos.add(car.position);
+                mesh.position.copy(worldPos);
+                mesh.rotation.y = car.rotation.y;
+            }
+        }
+        
         function animate(time = 0) {
             requestAnimationFrame(animate);
             const delta = Math.min((time - lastTime) / 1000, 0.1);
             lastTime = time;
             
-            if (gameStarted) updateControls(delta);
+            if (gameStarted) {
+                updateControls(delta);
+                updateInCarPositions();  // Smooth player positions in car
+            }
             if (renderer && scene && camera) renderer.render(scene, camera);
         }
         

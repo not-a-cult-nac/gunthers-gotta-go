@@ -551,6 +551,7 @@ io.on('connection', (socket) => {
         room.players.set(socket.id, { 
             name: playerName || 'Player', 
             inCar: true, 
+            seatIndex: playerIndex,  // First player gets seat 0 (driver)
             x: 0, 
             z: START_Z,
             color: colors[playerIndex % 4],
@@ -570,9 +571,21 @@ io.on('connection', (socket) => {
         
         const playerIndex = room.players.size;
         const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12'];
+        
+        // Find first available seat
+        const takenSeats = new Set();
+        for (const [id, p] of room.players) {
+            if (p.seatIndex !== undefined) takenSeats.add(p.seatIndex);
+        }
+        let seatIndex = 0;
+        for (let i = 0; i < 4; i++) {
+            if (!takenSeats.has(i)) { seatIndex = i; break; }
+        }
+        
         room.players.set(socket.id, { 
             name: playerName || 'Player', 
             inCar: true, 
+            seatIndex: seatIndex,
             x: room.car.x, 
             z: room.car.z,
             color: colors[playerIndex % 4],

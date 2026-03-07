@@ -50,6 +50,12 @@ const AutoplayController = {
         const { car, gunther, enemies } = state;
         const { carRotation, inCar, isDriver, player } = localState;
         
+        // Debug state every 3 seconds
+        if (this.debugLog && performance.now() - this.lastDebugTime > 3000) {
+            console.log(`[AI] State: gunther=${gunther?.state}, enemies=${enemies?.length || 0}, inCar=${inCar}, isDriver=${isDriver}`);
+            this.lastDebugTime = performance.now();
+        }
+        
         // Reset movement
         GameInput.moveForward = 0;
         GameInput.moveSide = 0;
@@ -73,7 +79,13 @@ const AutoplayController = {
         const { enemies, car, gunther } = state;
         const { inCar, isDriver, carRotation } = local;
         
-        if (!inCar || !isDriver || !enemies || !car) return false;
+        if (!inCar || !isDriver || !enemies || !car) {
+            if (this.debugLog && performance.now() - this.lastDebugTime > 2000) {
+                console.log(`[AI] Combat skipped: inCar=${inCar}, isDriver=${isDriver}, enemies=${enemies?.length || 0}, car=${!!car}`);
+                this.lastDebugTime = performance.now();
+            }
+            return false;
+        }
         
         // Find best target with aggressive prioritization:
         // 1. Enemy that has Gunther (MUST kill immediately)

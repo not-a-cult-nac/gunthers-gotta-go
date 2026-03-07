@@ -10,10 +10,11 @@ const AutoplayController = {
     
     // Tuning - aggressive shooting, conservative rescue
     SHOOT_RANGE: 50,           // Shoot enemies from further away
-    SHOOT_COOLDOWN: 100,       // ms between shots (faster!)
-    AIM_SPEED: 8,              // Faster aiming
-    PRIORITY_RANGE: 30,        // Prioritize enemies this close
-    SAFE_EXIT_RANGE: 40,       // Only exit car if ALL enemies are this far
+    SHOOT_COOLDOWN: 80,        // ms between shots (faster!)
+    AIM_SPEED: 12,             // Much faster aiming
+    PRIORITY_RANGE: 35,        // Prioritize enemies this close
+    SAFE_EXIT_RANGE: 50,       // Only exit car if ALL enemies are this far
+    AIM_TOLERANCE: 0.5,        // Wider aim tolerance for faster shots
     
     init() {
         console.log('[Autoplay] Controller initialized');
@@ -150,13 +151,15 @@ const AutoplayController = {
         const targetAngle = Math.atan2(target.x - car.x, target.z - car.z);
         const angleDiff = this.normalizeAngle(targetAngle - carRotation);
         const distToTarget = Math.hypot(target.x - car.x, target.z - car.z);
+        const isPriorityTarget = targetPriority < 0;  // Negative priority = high priority target
         
-        // Aggressive turning toward target
-        GameInput.moveSide = -Math.sign(angleDiff) * Math.min(Math.abs(angleDiff) * 3, 1.0);
+        // Very aggressive turning toward target
+        GameInput.moveSide = -Math.sign(angleDiff) * Math.min(Math.abs(angleDiff) * 5, 1.0);
         
-        // Shoot if aimed well enough (more generous angle)
+        // Shoot with wider tolerance - spray and pray against priority targets
         const now = performance.now();
-        if (Math.abs(angleDiff) < 0.4 && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
+        const aimTolerance = isPriorityTarget ? this.AIM_TOLERANCE * 1.5 : this.AIM_TOLERANCE;
+        if (Math.abs(angleDiff) < aimTolerance && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
             GameInput.triggerAction('shoot');
             this.lastShootTime = now;
             if (this.debugLog) {
@@ -169,8 +172,7 @@ const AutoplayController = {
         
         // Keep moving forward while shooting
         // Slow down more when aiming at priority targets
-        const isPriorityTarget = targetPriority < 0;
-        GameInput.moveForward = isPriorityTarget ? 0.3 : (Math.abs(angleDiff) < 0.5 ? 0.7 : 0.5);
+        GameInput.moveForward = isPriorityTarget ? 0.2 : (Math.abs(angleDiff) < 0.5 ? 0.7 : 0.5);
         
         return true;
     },

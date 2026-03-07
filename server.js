@@ -616,8 +616,21 @@ io.on('connection', (socket) => {
         const player = currentRoom.players.get(socket.id);
         if (player) {
             player.inCar = false;
+            player.isDriver = false;
             player.x = currentRoom.car.x + 4;
             player.z = currentRoom.car.z;
+            
+            // If driver exits, assign new driver to someone still in car
+            if (currentRoom.driver === socket.id) {
+                currentRoom.driver = null;
+                for (const [id, p] of currentRoom.players) {
+                    if (p.inCar) {
+                        currentRoom.driver = id;
+                        p.isDriver = true;
+                        break;
+                    }
+                }
+            }
         }
     });
     
@@ -628,6 +641,17 @@ io.on('connection', (socket) => {
             const dist = Math.hypot(player.x - currentRoom.car.x, player.z - currentRoom.car.z);
             if (dist < 6) {
                 player.inCar = true;
+                
+                // First person in becomes driver
+                const playersInCar = Array.from(currentRoom.players.values()).filter(p => p.inCar);
+                if (playersInCar.length === 1) {
+                    // This player is first in, they become driver
+                    currentRoom.driver = socket.id;
+                    for (const [id, p] of currentRoom.players) {
+                        p.isDriver = (id === socket.id);
+                    }
+                }
+                
                 // If holding Gunther's hand, bring him into the car!
                 if (currentRoom.gunther.state === 'holding_hands' && currentRoom.gunther.holderId === socket.id) {
                     currentRoom.gunther.state = 'in_car';

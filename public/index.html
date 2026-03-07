@@ -748,24 +748,105 @@
             scene.add(terrain);
         }
         
+        // Seat positions in the jeep (local coordinates)
+        const SEAT_POSITIONS = [
+            { x: -0.7, y: 1.3, z: -0.8, label: 'driver' },      // Front left - driver
+            { x: 0.7, y: 1.3, z: -0.8, label: 'passenger' },    // Front right
+            { x: -0.7, y: 1.3, z: 1.2, label: 'back-left' },    // Back left
+            { x: 0.7, y: 1.3, z: 1.2, label: 'back-right' },    // Back right
+        ];
+        const GUNTHER_SEAT = { x: 0, y: 1.3, z: 1.2 };  // Middle back seat
+        
+        let seatOccupants = {};  // playerId -> seat index
+        
         function createCar() {
             car = new THREE.Group();
-            const mat = new THREE.MeshStandardMaterial({ color: 0x4a5d23 });
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5d23 }); // Army green
+            const metalMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const seatMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown seats
             
-            const body = new THREE.Mesh(new THREE.BoxGeometry(3, 1.8, 4.5), mat);
-            body.position.y = 1.4; body.castShadow = true;
-            car.add(body);
+            // Main body - lower, open top jeep style
+            const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 5), bodyMat);
+            chassis.position.y = 0.9;
+            chassis.castShadow = true;
+            car.add(chassis);
             
-            const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1, 2), mat);
-            cab.position.set(0, 2.6, -0.5); cab.castShadow = true;
-            car.add(cab);
+            // Hood
+            const hood = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.4, 1.5), bodyMat);
+            hood.position.set(0, 1.4, -2);
+            hood.castShadow = true;
+            car.add(hood);
             
+            // Windshield frame
+            const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 0.1), metalMat);
+            windshield.position.set(0, 2, -1.2);
+            car.add(windshield);
+            
+            // Roll bars
+            const rollBarMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+            [[-1.3, 2.5, 0.5], [1.3, 2.5, 0.5]].forEach(([x, y, z]) => {
+                const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2), rollBarMat);
+                bar.position.set(x, y, z);
+                car.add(bar);
+            });
+            // Top bar
+            const topBar = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, 0.1), rollBarMat);
+            topBar.position.set(0, 3.5, 0.5);
+            car.add(topBar);
+            
+            // Side walls (low)
+            const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 4), bodyMat);
+            sideWall.position.set(-1.5, 1.5, 0);
+            car.add(sideWall);
+            const sideWall2 = sideWall.clone();
+            sideWall2.position.x = 1.5;
+            car.add(sideWall2);
+            
+            // Back wall
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(3, 0.8, 0.15), bodyMat);
+            backWall.position.set(0, 1.5, 2.4);
+            car.add(backWall);
+            
+            // Front seats
+            SEAT_POSITIONS.slice(0, 2).forEach((pos) => {
+                const seat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.8), seatMat);
+                seat.position.set(pos.x, pos.y - 0.3, pos.z);
+                car.add(seat);
+                const back = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.15), seatMat);
+                back.position.set(pos.x, pos.y + 0.1, pos.z + 0.4);
+                car.add(back);
+            });
+            
+            // Back bench seat
+            const backSeat = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 0.8), seatMat);
+            backSeat.position.set(0, 1, 1.2);
+            car.add(backSeat);
+            const backSeatBack = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.6, 0.15), seatMat);
+            backSeatBack.position.set(0, 1.4, 1.6);
+            car.add(backSeatBack);
+            
+            // Wheels
             const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            [[-1.2, -1.3], [1.2, -1.3], [-1.2, 1.3], [1.2, 1.3]].forEach(([x, z]) => {
-                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.4), wheelMat);
+            [[-1.4, -1.8], [1.4, -1.8], [-1.4, 1.6], [1.4, 1.6]].forEach(([x, z]) => {
+                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.5, 16), wheelMat);
                 wheel.rotation.z = Math.PI / 2;
-                wheel.position.set(x, 0.5, z);
+                wheel.position.set(x, 0.55, z);
+                wheel.castShadow = true;
                 car.add(wheel);
+                // Hub cap
+                const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.52, 8), metalMat);
+                hub.rotation.z = Math.PI / 2;
+                hub.position.set(x, 0.55, z);
+                car.add(hub);
+            });
+            
+            // Headlights
+            const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 0.3 });
+            [[-0.8, 1.3, -2.5], [0.8, 1.3, -2.5]].forEach(([x, y, z]) => {
+                const light = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 8), lightMat);
+                light.rotation.x = Math.PI / 2;
+                light.position.set(x, y, z);
+                car.add(light);
             });
             
             car.position.set(0, 0, START_Z);

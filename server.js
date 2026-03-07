@@ -548,24 +548,53 @@ class GameRoom {
             }
         }
         
+        // Spatial calculations for AI
+        const distCarToGunther = Math.hypot(this.gunther.x - this.car.x, this.gunther.z - this.car.z);
+        const angleCarToGunther = Math.atan2(this.gunther.x - this.car.x, this.gunther.z - this.car.z);
+        const distCarToGoal = Math.hypot(this.car.x - 0, this.car.z - GOAL_Z);
+        const angleCarToGoal = Math.atan2(0 - this.car.x, GOAL_Z - this.car.z);
+        
+        // Angle difference (how far car needs to turn)
+        const normalizeAngle = (a) => ((a + Math.PI) % (2 * Math.PI)) - Math.PI;
+        const turnToGunther = normalizeAngle(angleCarToGunther - this.car.rotation);
+        const turnToGoal = normalizeAngle(angleCarToGoal - this.car.rotation);
+        
         return {
-            car: this.car,
+            car: {
+                ...this.car,
+                // Spatial awareness
+                distToGunther: distCarToGunther,
+                angleToGunther: angleCarToGunther,
+                turnToGunther,  // How much to turn to face Gunther
+                distToGoal: distCarToGoal,
+                angleToGoal: angleCarToGoal,
+                turnToGoal,     // How much to turn to face goal
+            },
             gunther: {
                 ...this.gunther,
-                distToCar: Math.hypot(this.gunther.x - this.car.x, this.gunther.z - this.car.z)
+                distToCar: distCarToGunther,
+                angleToCar: normalizeAngle(angleCarToGunther + Math.PI),  // Opposite direction
             },
             enemies: enrichedEnemies,
-            hazards: HAZARDS,  // Expose hazards for AI
+            hazards: HAZARDS,
             nearestEnemyToGunther,
+            nearestEnemyDist: nearestDist,
             guntherInDanger: nearestDist < 15 && (this.gunther.state === 'wandering' || this.gunther.state === 'trapped'),
             gameState: this.gameState,
-            players: Array.from(this.players.entries()).map(([id, p]) => ({
-                id, name: p.name, inCar: p.inCar, x: p.x, z: p.z, color: p.color, isDriver: p.isDriver
-            })),
+            players: Array.from(this.players.entries()).map(([id, p]) => {
+                const distToGunther = Math.hypot(p.x - this.gunther.x, p.z - this.gunther.z);
+                const distToCar = Math.hypot(p.x - this.car.x, p.z - this.car.z);
+                return {
+                    id, name: p.name, inCar: p.inCar, x: p.x, z: p.z, color: p.color, isDriver: p.isDriver,
+                    distToGunther,
+                    distToCar
+                };
+            }),
             driver: this.driver,
             lastQuote: this.lastQuote,
             loseReason: this.loseReason,
-            goalZ: GOAL_Z
+            goalZ: GOAL_Z,
+            startZ: START_Z
         };
     }
 }

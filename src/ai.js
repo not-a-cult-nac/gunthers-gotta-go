@@ -6,8 +6,7 @@ const AI_CONFIG = {
     GRAB_RANGE: 5,         // Try to grab Gunther when this close
     CAR_ENTER_RANGE: 5,    // Get in car when this close
     SHOOT_RANGE: 50,       // Max shooting distance
-    AIM_TOLERANCE: 0.2,    // Radians of acceptable aim error
-    SHOOT_COOLDOWN: 0.25   // Seconds between shots
+    SHOOT_COOLDOWN: 0.15   // Seconds between shots (fast!)
 };
 
 class AIController {
@@ -115,22 +114,23 @@ class AIController {
         const captor = enemies.find(e => e.id === gunther.captorId);
         if (!captor) return;
         
-        const dist = Math.hypot(captor.x - player.x, captor.z - player.z);
-        const angle = Math.atan2(captor.x - player.x, captor.z - player.z);
-        const angleDiff = this.normalizeAngle(angle - player.rotation);
+        const dx = captor.x - player.x;
+        const dz = captor.z - player.z;
+        const dist = Math.hypot(dx, dz);
         
-        // Shoot if lined up
+        // Shoot directly at captor (don't depend on player.rotation)
         if (dist < AI_CONFIG.SHOOT_RANGE && 
-            Math.abs(angleDiff) < AI_CONFIG.AIM_TOLERANCE &&
+            dist > 1 &&  // Not too close
             time - this.lastShootTime > AI_CONFIG.SHOOT_COOLDOWN) {
             
-            const dirX = Math.sin(player.rotation);
-            const dirZ = Math.cos(player.rotation);
+            // Shoot directly toward captor
+            const dirX = dx / dist;
+            const dirZ = dz / dist;
             inputs.shoot = { dirX, dirZ };
             this.lastShootTime = time;
         }
         
-        // Move toward and aim at captor
+        // Sprint toward captor
         this.moveToward(state, inputs, captor.x, captor.z);
     }
     
@@ -185,7 +185,7 @@ class AIController {
         
         for (const enemy of enemies) {
             const dist = Math.hypot(enemy.x - player.x, enemy.z - player.z);
-            if (dist < AI_CONFIG.SHOOT_RANGE && dist < nearestDist) {
+            if (dist < AI_CONFIG.SHOOT_RANGE && dist > 1 && dist < nearestDist) {
                 nearestDist = dist;
                 nearest = enemy;
             }
@@ -193,15 +193,13 @@ class AIController {
         
         if (!nearest) return;
         
-        const angle = Math.atan2(nearest.x - player.x, nearest.z - player.z);
-        const angleDiff = this.normalizeAngle(angle - player.rotation);
-        
-        if (Math.abs(angleDiff) < AI_CONFIG.AIM_TOLERANCE) {
-            const dirX = Math.sin(player.rotation);
-            const dirZ = Math.cos(player.rotation);
-            inputs.shoot = { dirX, dirZ };
-            this.lastShootTime = time;
-        }
+        // Shoot directly at target
+        const dx = nearest.x - player.x;
+        const dz = nearest.z - player.z;
+        const dirX = dx / nearestDist;
+        const dirZ = dz / nearestDist;
+        inputs.shoot = { dirX, dirZ };
+        this.lastShootTime = time;
     }
     
     moveToward(state, inputs, targetX, targetZ) {

@@ -60,12 +60,11 @@ class GameSimulation {
         this.time = 0;
         this.pendingSpawns = []; // Replaces setTimeout
         
-        // Test mode: slightly easier for reliable e2e testing
         this.config = {
-            escapeRate: 0.03,     // Reduced - less random escapes
-            lureRange: 10,        // Reduced - enemies must be closer to lure
-            enemySpeed: 2.5,      // Reduced - slower enemies
-            guntherSpeed: 2.5     // Reduced - slower wandering
+            escapeRate: 0.05,     // Probability per second of random escape
+            lureRange: 12,        // Distance at which enemies lure Gunther out
+            enemySpeed: 3,        // Base enemy movement speed
+            guntherSpeed: 3.5     // Gunther wander speed
         };
         
         // Spawn initial enemies

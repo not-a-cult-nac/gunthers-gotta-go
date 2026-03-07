@@ -78,12 +78,11 @@ class GameRoom {
         this.loseReason = '';
         
         // Debug config (can be adjusted via debug panel)
-        // Tuned for reliable AI testing - still challenging for humans
         this.config = {
-            escapeRate: 0.03,       // Reduced for AI consistency
-            lureRange: 10,          // Distance at which enemies lure Gunther out
-            enemySpeed: 2.5,        // Base enemy movement speed
-            guntherSpeed: 2.5       // Gunther wander speed
+            escapeRate: 0.05,       // Probability per second of random escape
+            lureRange: 12,          // Distance at which enemies lure Gunther out
+            enemySpeed: 3,          // Base enemy movement speed
+            guntherSpeed: 3.5       // Gunther wander speed
         };
     }
     

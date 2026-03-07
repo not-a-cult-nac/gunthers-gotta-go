@@ -322,25 +322,22 @@ const AutoplayController = {
         const angleToEnemy = Math.atan2(dx, dz);
         const angleDiff = Math.abs(this.normalizeAngle(angleToEnemy - playerRotation));
         
-        // Move toward enemy if too far
-        if (dist > this.SHOOT_RANGE) {
-            GameInput.sprint = true;
-            this.moveToward(targetEnemy, player.position, playerRotation);
-            return;
-        }
+        // Always sprint toward the captor!
+        GameInput.sprint = true;
+        this.moveToward(targetEnemy, player.position, playerRotation);
         
-        // Aim at enemy
+        // Also aim at enemy while moving
         const aimDir = this.normalizeAngle(angleToEnemy - playerRotation);
         GameInput.aimX = Math.max(-0.1, Math.min(0.1, aimDir * 0.4));
         
-        // Shoot if aimed
+        // Shoot if in range and aimed
         const now = performance.now();
-        if (angleDiff < this.AIM_TOLERANCE && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
+        if (dist < this.SHOOT_RANGE && angleDiff < this.AIM_TOLERANCE && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
             GameInput.triggerAction('shoot');
             this.lastShootTime = now;
             console.log(`[AI] SHOOTING captor at dist=${dist.toFixed(0)}`);
         } else if (this.debugLog && now - this.lastDebugTime > 500) {
-            console.log(`[AI] Aiming at captor dist=${dist.toFixed(0)}, angleDiff=${angleDiff.toFixed(2)}`);
+            console.log(`[AI] Chasing captor dist=${dist.toFixed(0)}, angleDiff=${angleDiff.toFixed(2)}`);
             this.lastDebugTime = now;
         }
     },

@@ -1245,8 +1245,12 @@
             // Render all players (including self when in car)
             for (const p of state.players) {
                 const isSelf = p.id === myPlayerId;
-                // Skip rendering self when on foot (would be weird), but show self when in car
-                if (isSelf && !p.inCar) continue;
+                // Hide self mesh when on foot (but keep mesh for when we enter car)
+                if (isSelf && !p.inCar) {
+                    const selfMesh = otherPlayers.get(p.id);
+                    if (selfMesh) selfMesh.visible = false;
+                    continue;
+                }
                 
                 let mesh = otherPlayers.get(p.id);
                 if (!mesh) {
@@ -1482,9 +1486,11 @@
         }
         
         let lastTime = 0;
-        // Update in-car player positions every frame (prevents judder)
+        // Update in-car player AND Gunther positions every frame (prevents judder)
         function updateInCarPositions() {
             if (!serverState) return;
+            
+            // Update players in car
             for (const p of serverState.players) {
                 if (!p.inCar) continue;
                 const mesh = otherPlayers.get(p.id);
@@ -1498,6 +1504,15 @@
                 worldPos.add(car.position);
                 mesh.position.copy(worldPos);
                 mesh.rotation.y = car.rotation.y;
+            }
+            
+            // Update Gunther in car (smooth positioning)
+            if (serverState.gunther?.state === 'in_car' && gunther) {
+                const seatPos = new THREE.Vector3(GUNTHER_SEAT.x, GUNTHER_SEAT.y, GUNTHER_SEAT.z);
+                seatPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y);
+                seatPos.add(car.position);
+                gunther.position.copy(seatPos);
+                gunther.rotation.y = car.rotation.y;
             }
         }
         

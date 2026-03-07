@@ -140,6 +140,7 @@
                 <button onclick="createRoom()">CREATE GAME</button>
                 <button onclick="showJoinForm()">JOIN GAME</button>
             </div>
+            <button onclick="startAutoplay()" style="margin-top: 15px; background: #6b35ff;">🤖 AUTOPLAY</button>
         </div>
         
         <div id="join-form">
@@ -167,6 +168,7 @@
         <button onclick="location.reload()">PLAY AGAIN</button>
     </div>
     
+    <div id="autoplay-badge" style="position: absolute; top: 10px; right: 10px; background: #6b35ff; color: white; padding: 5px 10px; border-radius: 5px; display: none; font-size: 14px; z-index: 200;">🤖 AUTOPLAY</div>
     <div id="ui">
         <div>GUNTHER: <span id="gunther-status">IN CAR</span></div>
         <div>ENEMIES: <span id="enemy-count">0</span></div>
@@ -300,6 +302,9 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/input.js"></script>
+    <script src="/js/human-input.js"></script>
+    <script src="/js/autoplay.js"></script>
     <script>
         const socket = io();
         
@@ -309,20 +314,6 @@
         let otherPlayers = new Map();
         let isDriver = false;
         let myPlayerId = null;
-        
-        // Debug test - call testMultiplayer() from console
-        window.testMultiplayer = function() {
-            console.log('=== MULTIPLAYER DEBUG ===');
-            console.log('My player ID:', myPlayerId);
-            console.log('Is driver:', isDriver);
-            console.log('Other players map size:', otherPlayers.size);
-            console.log('Other players:', Array.from(otherPlayers.keys()));
-            console.log('Seat occupants:', seatOccupants);
-            if (serverState) {
-                console.log('Server state players:', serverState.players);
-            }
-            return 'Check console for multiplayer state';
-        };
         let isInCar = true;
         let guntherHoldingHands = false;
         let gameStarted = false;
@@ -330,60 +321,6 @@
         let serverState = null;
         
         const keys = {};
-        
-        // Input abstraction - semantic actions instead of raw keys
-        const actions = {
-            moveForward: false,
-            moveBackward: false,
-            moveLeft: false,
-            moveRight: false,
-            turnLeft: false,
-            turnRight: false,
-            interact: false,      // E - enter/exit vehicle
-            holdHand: false,      // Space - grab/release Gunther
-            shoot: false,         // Mouse click
-        };
-        
-        // Map raw inputs to actions (call this each frame)
-        function updateActions() {
-            actions.moveForward = keys['KeyW'] || keys['ArrowUp'] || false;
-            actions.moveBackward = keys['KeyS'] || keys['ArrowDown'] || false;
-            actions.moveLeft = keys['KeyA'] || keys['ArrowLeft'] || false;
-            actions.moveRight = keys['KeyD'] || keys['ArrowRight'] || false;
-            actions.turnLeft = keys['KeyA'] || keys['ArrowLeft'] || false;
-            actions.turnRight = keys['KeyD'] || keys['ArrowRight'] || false;
-            actions.interact = keys['KeyE'] || false;
-            actions.holdHand = keys['Space'] || false;
-            // shoot is handled separately via mouse
-        }
-        
-        // Programmatic input for testing/AI
-        window.setAction = function(action, value) {
-            if (action in actions) {
-                actions[action] = value;
-                return true;
-            }
-            return false;
-        };
-        
-        // Simulate a button press (auto-releases after delay)
-        window.pressAction = function(action, durationMs = 100) {
-            if (action in actions) {
-                actions[action] = true;
-                setTimeout(() => { actions[action] = false; }, durationMs);
-                return true;
-            }
-            return false;
-        };
-        
-        // Hold an action for continuous input (returns release function)
-        window.holdAction = function(action) {
-            if (action in actions) {
-                actions[action] = true;
-                return () => { actions[action] = false; };
-            }
-            return null;
-        };
         
         // Mobile detection and touch controls
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
@@ -572,6 +509,10 @@
         socket.on('gameState', (state) => {
             serverState = state;
             if (scene) updateFromServer(state);
+            // Update autoplay with new state
+            if (typeof AutoplayController !== 'undefined') {
+                AutoplayController.updateState(state);
+            }
         });
         
         socket.on('enemyHit', (data) => {
@@ -588,6 +529,19 @@
         });
         
         function startGame() { socket.emit('startGame'); }
+        
+        function startAutoplay() {
+            // Use a default name for autoplay
+            document.getElementById('player-name').value = 'AutoBot';
+            document.getElementById('autoplay-badge').style.display = 'block';
+            AutoplayController.enable();
+            HumanInput.init();
+            createRoom();
+            // Auto-start game after room is created
+            socket.once('roomCreated', () => {
+                setTimeout(() => socket.emit('startGame'), 500);
+            });
+        }
         
         function setupMobileControls() {
             const joystickZone = document.getElementById('joystick-zone');
@@ -748,6 +702,9 @@
             document.addEventListener('click', onShoot);
             window.addEventListener('resize', onResize);
             
+            // Initialize input system
+            if (typeof HumanInput !== 'undefined') HumanInput.init();
+            
             animate();
         }
         
@@ -786,105 +743,24 @@
             scene.add(terrain);
         }
         
-        // Seat positions in the jeep (local coordinates)
-        const SEAT_POSITIONS = [
-            { x: -0.7, y: 1.3, z: -0.8, label: 'driver' },      // Front left - driver
-            { x: 0.7, y: 1.3, z: -0.8, label: 'passenger' },    // Front right
-            { x: -0.7, y: 1.3, z: 1.2, label: 'back-left' },    // Back left
-            { x: 0.7, y: 1.3, z: 1.2, label: 'back-right' },    // Back right
-        ];
-        const GUNTHER_SEAT = { x: 0, y: 1.3, z: 1.2 };  // Middle back seat
-        
-        let seatOccupants = {};  // playerId -> seat index
-        
         function createCar() {
             car = new THREE.Group();
-            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5d23 }); // Army green
-            const metalMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-            const seatMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown seats
+            const mat = new THREE.MeshStandardMaterial({ color: 0x4a5d23 });
             
-            // Main body - lower, open top jeep style
-            const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 5), bodyMat);
-            chassis.position.y = 0.9;
-            chassis.castShadow = true;
-            car.add(chassis);
+            const body = new THREE.Mesh(new THREE.BoxGeometry(3, 1.8, 4.5), mat);
+            body.position.y = 1.4; body.castShadow = true;
+            car.add(body);
             
-            // Hood
-            const hood = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.4, 1.5), bodyMat);
-            hood.position.set(0, 1.4, -2);
-            hood.castShadow = true;
-            car.add(hood);
+            const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1, 2), mat);
+            cab.position.set(0, 2.6, -0.5); cab.castShadow = true;
+            car.add(cab);
             
-            // Windshield frame
-            const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 0.1), metalMat);
-            windshield.position.set(0, 2, -1.2);
-            car.add(windshield);
-            
-            // Roll bars
-            const rollBarMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            [[-1.3, 2.5, 0.5], [1.3, 2.5, 0.5]].forEach(([x, y, z]) => {
-                const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2), rollBarMat);
-                bar.position.set(x, y, z);
-                car.add(bar);
-            });
-            // Top bar
-            const topBar = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, 0.1), rollBarMat);
-            topBar.position.set(0, 3.5, 0.5);
-            car.add(topBar);
-            
-            // Side walls (low)
-            const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 4), bodyMat);
-            sideWall.position.set(-1.5, 1.5, 0);
-            car.add(sideWall);
-            const sideWall2 = sideWall.clone();
-            sideWall2.position.x = 1.5;
-            car.add(sideWall2);
-            
-            // Back wall
-            const backWall = new THREE.Mesh(new THREE.BoxGeometry(3, 0.8, 0.15), bodyMat);
-            backWall.position.set(0, 1.5, 2.4);
-            car.add(backWall);
-            
-            // Front seats
-            SEAT_POSITIONS.slice(0, 2).forEach((pos) => {
-                const seat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.8), seatMat);
-                seat.position.set(pos.x, pos.y - 0.3, pos.z);
-                car.add(seat);
-                const back = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.15), seatMat);
-                back.position.set(pos.x, pos.y + 0.1, pos.z + 0.4);
-                car.add(back);
-            });
-            
-            // Back bench seat
-            const backSeat = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 0.8), seatMat);
-            backSeat.position.set(0, 1, 1.2);
-            car.add(backSeat);
-            const backSeatBack = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.6, 0.15), seatMat);
-            backSeatBack.position.set(0, 1.4, 1.6);
-            car.add(backSeatBack);
-            
-            // Wheels
             const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            [[-1.4, -1.8], [1.4, -1.8], [-1.4, 1.6], [1.4, 1.6]].forEach(([x, z]) => {
-                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.5, 16), wheelMat);
+            [[-1.2, -1.3], [1.2, -1.3], [-1.2, 1.3], [1.2, 1.3]].forEach(([x, z]) => {
+                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.4), wheelMat);
                 wheel.rotation.z = Math.PI / 2;
-                wheel.position.set(x, 0.55, z);
-                wheel.castShadow = true;
+                wheel.position.set(x, 0.5, z);
                 car.add(wheel);
-                // Hub cap
-                const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.52, 8), metalMat);
-                hub.rotation.z = Math.PI / 2;
-                hub.position.set(x, 0.55, z);
-                car.add(hub);
-            });
-            
-            // Headlights
-            const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 0.3 });
-            [[-0.8, 1.3, -2.5], [0.8, 1.3, -2.5]].forEach(([x, y, z]) => {
-                const light = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 8), lightMat);
-                light.rotation.x = Math.PI / 2;
-                light.position.set(x, y, z);
-                car.add(light);
             });
             
             car.position.set(0, 0, START_Z);
@@ -1117,9 +993,9 @@
         }
         
         function updateFromServer(state) {
-            // Car - only update from server if we're NOT the driver (passengers and spectators sync from server)
+            // Car - only update from server if we're NOT in the car (let driver be authoritative)
             if (car && state.car) {
-                if (!isDriver) {
+                if (!isInCar) {
                     // Not driving - accept server position
                     car.position.x = state.car.x;
                     car.position.z = state.car.z;
@@ -1132,27 +1008,10 @@
             
             // Gunther
             if (gunther && state.gunther) {
-                if (state.gunther.state === 'in_car') {
-                    // Gunther sits in middle of back seat - use local car position, no server sync
-                    gunther.visible = true;
-                    // Calculate position based on current client car position
-                    const seatPos = new THREE.Vector3(GUNTHER_SEAT.x, GUNTHER_SEAT.y, GUNTHER_SEAT.z);
-                    seatPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), carRotation);
-                    seatPos.add(car.position);
-                    gunther.position.copy(seatPos);
-                    gunther.rotation.y = carRotation;
-                } else {
-                    // Not in car - use server position with smoothing
-                    gunther.visible = state.gunther.visible;
-                    const targetX = state.gunther.x;
-                    const targetZ = state.gunther.z;
-                    const targetY = getTerrainHeight(targetX, targetZ);
-                    // Smooth interpolation
-                    gunther.position.x += (targetX - gunther.position.x) * 0.3;
-                    gunther.position.z += (targetZ - gunther.position.z) * 0.3;
-                    gunther.position.y += (targetY - gunther.position.y) * 0.3;
-                    gunther.rotation.y = 0;
-                }
+                gunther.visible = state.gunther.visible;
+                gunther.position.x = state.gunther.x;
+                gunther.position.z = state.gunther.z;
+                gunther.position.y = getTerrainHeight(state.gunther.x, state.gunther.z);
                 
                 const marker = gunther.getObjectByName('marker');
                 if (marker) {
@@ -1223,91 +1082,46 @@
             const goalDist = Math.hypot(state.car.x, state.car.z - GOAL_Z);
             document.getElementById('distance').textContent = Math.round(goalDist);
             
-            // Update driver status from server
-            const me = state.players.find(p => p.id === myPlayerId);
-            if (me) {
-                isDriver = me.isDriver;
-            }
-            
-            // Assign seats to players in car
-            seatOccupants = {};
-            let seatIndex = 0;
-            for (const p of state.players) {
-                if (p.inCar && seatIndex < SEAT_POSITIONS.length) {
-                    seatOccupants[p.id] = seatIndex;
-                    seatIndex++;
-                }
-            }
-            
-            // Debug: log players array (remove after testing)
-            if (state.players.length > 1) {
-                console.log('Players:', state.players.map(p => ({ id: p.id.slice(-4), inCar: p.inCar, me: p.id === myPlayerId })));
-            }
-            
             // Render other players
             for (const p of state.players) {
                 if (p.id === myPlayerId) continue;  // Don't render self
                 
                 let mesh = otherPlayers.get(p.id);
                 if (!mesh) {
-                    console.log('Creating mesh for player:', p.id.slice(-4), 'color:', p.color);
-                    try {
-                        // Create player mesh with their color
-                        mesh = new THREE.Group();
-                        
-                        // Body - simple cylinder
-                        const bodyMat = new THREE.MeshStandardMaterial({ color: p.color || 0x888888 });
-                        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8), bodyMat);
-                        body.position.y = 0.6;
-                        body.castShadow = true;
-                        mesh.add(body);
-                        
-                        // Head
-                        const head = new THREE.Mesh(
-                            new THREE.SphereGeometry(0.3),
-                            new THREE.MeshStandardMaterial({ color: 0xffcc99 })
-                        );
-                        head.position.y = 1.5;
-                        mesh.add(head);
-                        
-                        // Helmet with color
-                        const helmet = new THREE.Mesh(
-                            new THREE.SphereGeometry(0.35),
-                            bodyMat
-                        );
-                        helmet.position.y = 1.6;
-                        helmet.scale.y = 0.6;
-                        mesh.add(helmet);
-                        
-                        scene.add(mesh);
-                        otherPlayers.set(p.id, mesh);
-                        console.log('Mesh created successfully for', p.id.slice(-4));
-                    } catch (err) {
-                        console.error('Error creating player mesh:', err);
-                    }
+                    // Create player mesh with their color
+                    mesh = new THREE.Group();
+                    
+                    // Body
+                    const bodyMat = new THREE.MeshStandardMaterial({ color: p.color || '#888888' });
+                    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.2), bodyMat);
+                    body.position.y = 1;
+                    body.castShadow = true;
+                    mesh.add(body);
+                    
+                    // Head
+                    const head = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.3),
+                        new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+                    );
+                    head.position.y = 2;
+                    mesh.add(head);
+                    
+                    // Name label (simplified - just a colored hat)
+                    const hat = new THREE.Mesh(
+                        new THREE.ConeGeometry(0.35, 0.5, 8),
+                        bodyMat
+                    );
+                    hat.position.y = 2.4;
+                    mesh.add(hat);
+                    
+                    scene.add(mesh);
+                    otherPlayers.set(p.id, mesh);
                 }
                 
                 // Update position
-                const seatIdx = seatOccupants[p.id];
-                if (p.inCar && seatIdx !== undefined) {
-                    // Seated in jeep
-                    mesh.visible = true;
-                    const seat = SEAT_POSITIONS[seatIdx];
-                    // Position relative to car
-                    const worldPos = new THREE.Vector3(seat.x, seat.y, seat.z);
-                    worldPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y);
-                    worldPos.add(car.position);
-                    mesh.position.copy(worldPos);
-                    mesh.rotation.y = car.rotation.y;
-                    console.log('Seated player', p.id.slice(-4), 'at seat', seatIdx);
-                } else if (p.inCar) {
-                    // In car but no seat assigned - still show them at car position
-                    mesh.visible = true;
-                    mesh.position.copy(car.position);
-                    mesh.position.y += 2;
-                    console.log('Player in car but no seat:', p.id.slice(-4));
+                if (p.inCar) {
+                    mesh.visible = false;  // Hide when in car
                 } else {
-                    // On foot
                     mesh.visible = true;
                     mesh.position.set(p.x, getTerrainHeight(p.x, p.z), p.z);
                 }
@@ -1373,8 +1187,19 @@
         function updateControls(delta) {
             if (!gameStarted || !car) return;
             
-            // Update action state from raw inputs
-            updateActions();
+            // Process input (human or AI)
+            if (typeof HumanInput !== 'undefined') HumanInput.update();
+            if (typeof AutoplayController !== 'undefined') {
+                AutoplayController.update(delta, {
+                    carRotation: carRotation,
+                    inCar: isInCar,
+                    isDriver: isDriver,
+                    player: player
+                });
+            }
+            
+            // Apply aim input to rotation
+            mouseX += GameInput.aimX;
             
             if (isInCar) {
                 // Only the driver can control the car
@@ -1382,18 +1207,18 @@
                     const driveSpeed = 12 * delta;
                     const turnSpeed = 2 * delta;
                     
-                    if (actions.turnLeft) carRotation += turnSpeed;
-                    if (actions.turnRight) carRotation -= turnSpeed;
+                    if (GameInput.moveSide < 0) carRotation += turnSpeed;
+                    if (GameInput.moveSide > 0) carRotation -= turnSpeed;
                     
                     const forward = new THREE.Vector3(Math.sin(carRotation), 0, Math.cos(carRotation));
                     
-                    if (actions.moveForward) {
-                        car.position.x += forward.x * driveSpeed;
-                        car.position.z += forward.z * driveSpeed;
+                    if (GameInput.moveForward > 0) {
+                        car.position.x += forward.x * driveSpeed * GameInput.moveForward;
+                        car.position.z += forward.z * driveSpeed * GameInput.moveForward;
                     }
-                    if (actions.moveBackward) {
-                        car.position.x -= forward.x * driveSpeed * 0.5;
-                        car.position.z -= forward.z * driveSpeed * 0.5;
+                    if (GameInput.moveForward < 0) {
+                        car.position.x += forward.x * driveSpeed * 0.5 * GameInput.moveForward;
+                        car.position.z += forward.z * driveSpeed * 0.5 * GameInput.moveForward;
                     }
                     
                     car.position.x = Math.max(-80, Math.min(80, car.position.x));
@@ -1416,10 +1241,10 @@
                 const forward = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
                 const right = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
                 
-                if (actions.moveForward) { player.position.x += forward.x * runSpeed; player.position.z += forward.z * runSpeed; }
-                if (actions.moveBackward) { player.position.x -= forward.x * runSpeed; player.position.z -= forward.z * runSpeed; }
-                if (actions.moveLeft) { player.position.x += right.x * runSpeed; player.position.z += right.z * runSpeed; }
-                if (actions.moveRight) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
+                if (GameInput.moveForward > 0) { player.position.x += forward.x * runSpeed; player.position.z += forward.z * runSpeed; }
+                if (GameInput.moveForward < 0) { player.position.x -= forward.x * runSpeed; player.position.z -= forward.z * runSpeed; }
+                if (GameInput.moveSide < 0) { player.position.x += right.x * runSpeed; player.position.z += right.z * runSpeed; }
+                if (GameInput.moveSide > 0) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
                 
                 player.position.y = getTerrainHeight(player.position.x, player.position.z);
                 player.rotation.y = playerRotation;
@@ -1432,8 +1257,8 @@
                 camera.lookAt(player.position.x, player.position.y + 1.5, player.position.z);
             }
             
-            // E to exit/enter
-            if (actions.interact && !actions.interact_prev) {
+            // E to exit/enter (use GameInput)
+            if (GameInput.consumeAction('enterExit')) {
                 if (isInCar) {
                     isInCar = false;
                     player.visible = true;
@@ -1452,17 +1277,25 @@
                     }
                 }
             }
-            actions.interact_prev = actions.interact;
             
-            // SPACE to hold/release Gunther's hand
-            if (actions.holdHand && !actions.holdHand_prev && !isInCar) {
+            // SPACE to hold/release Gunther's hand (use GameInput)
+            if (GameInput.consumeAction('holdHand') && !isInCar) {
                 if (guntherHoldingHands) {
                     socket.emit('releaseHand');
                 } else {
                     socket.emit('holdHand');
                 }
             }
-            actions.holdHand_prev = actions.holdHand;
+            
+            // Shooting (use GameInput)
+            if (GameInput.consumeAction('shoot') && isInCar && isDriver) {
+                const pos = car.position;
+                const dir = new THREE.Vector3(Math.sin(carRotation), 0, Math.cos(carRotation));
+                socket.emit('shoot', { x: pos.x, z: pos.z, dirX: dir.x, dirZ: dir.z });
+            }
+            
+            // Reset input deltas
+            if (typeof GameInput !== 'undefined') GameInput.resetDeltas();
         }
         
         function endGame(won, msg) {
@@ -1496,6 +1329,11 @@
                 document.body.requestPointerLock();
             }
         });
+        
+        // Check for autoplay URL param
+        if (new URLSearchParams(window.location.search).has('autoplay')) {
+            window.addEventListener('load', () => startAutoplay());
+        }
     </script>
 </body>
 </html>

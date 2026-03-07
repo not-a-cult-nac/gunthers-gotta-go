@@ -6,11 +6,12 @@ const AutoplayController = {
     lastState: null,
     lastShootTime: 0,
     
-    // Tuning - aggressive settings
-    SHOOT_RANGE: 45,           // Shoot enemies from further away
-    SHOOT_COOLDOWN: 150,       // ms between shots
-    AIM_SPEED: 6,              // Faster aiming
-    PRIORITY_RANGE: 25,        // Prioritize enemies this close
+    // Tuning - aggressive shooting, conservative rescue
+    SHOOT_RANGE: 50,           // Shoot enemies from further away
+    SHOOT_COOLDOWN: 100,       // ms between shots (faster!)
+    AIM_SPEED: 8,              // Faster aiming
+    PRIORITY_RANGE: 30,        // Prioritize enemies this close
+    SAFE_EXIT_RANGE: 40,       // Only exit car if ALL enemies are this far
     
     init() {
         console.log('[Autoplay] Controller initialized');
@@ -66,33 +67,48 @@ const AutoplayController = {
         
         if (!inCar || !isDriver || !enemies || !car) return false;
         
-        // Find best target:
-        // 1. Enemy that has Gunther (highest priority)
-        // 2. Closest enemy in range
+        // Find best target with aggressive prioritization:
+        // 1. Enemy that has Gunther (MUST kill immediately)
+        // 2. Enemy close to Gunther who's wandering (prevent capture)
+        // 3. Enemy heading toward car/Gunther
+        // 4. Closest enemy in range
         let target = null;
         let targetPriority = Infinity;
         
+        // Reference point: where should we defend?
+        const defendX = (gunther && gunther.state === 'wandering') ? gunther.x : car.x;
+        const defendZ = (gunther && gunther.state === 'wandering') ? gunther.z : car.z;
+        
         for (const e of enemies) {
-            const dist = Math.hypot(e.x - car.x, e.z - car.z);
+            const distToCar = Math.hypot(e.x - car.x, e.z - car.z);
+            const distToDefend = Math.hypot(e.x - defendX, e.z - defendZ);
             
-            if (dist > this.SHOOT_RANGE) continue;
+            if (distToCar > this.SHOOT_RANGE) continue;
             
-            let priority = dist;
+            let priority = distToCar;
             
-            // Enemy has Gunther = top priority
+            // Enemy has Gunther = ABSOLUTE priority
             if (e.hasGunther) {
-                priority = -1000;
+                priority = -10000;
             }
-            // Enemy close to Gunther = high priority
+            // Enemy very close to loose Gunther = critical
             else if (gunther && gunther.state === 'wandering') {
                 const distToGunther = Math.hypot(e.x - gunther.x, e.z - gunther.z);
-                if (distToGunther < 15) {
-                    priority = distToGunther - 100;  // Prioritize enemies near Gunther
+                if (distToGunther < 8) {
+                    priority = -5000 + distToGunther;  // Closer to Gunther = higher priority
+                } else if (distToGunther < 15) {
+                    priority = -1000 + distToGunther;
+                } else if (distToGunther < 25) {
+                    priority = -100 + distToGunther;  // Still prioritize somewhat
                 }
             }
-            // Close enemies = higher priority
-            else if (dist < this.PRIORITY_RANGE) {
-                priority = dist - 50;
+            // Close to car = high priority
+            else if (distToCar < this.PRIORITY_RANGE) {
+                priority = distToCar - 200;
+            }
+            // In range but far = still valid target
+            else {
+                priority = distToCar;
             }
             
             if (priority < targetPriority) {
@@ -107,19 +123,20 @@ const AutoplayController = {
         const targetAngle = Math.atan2(target.x - car.x, target.z - car.z);
         const angleDiff = this.normalizeAngle(targetAngle - carRotation);
         
-        // Turn toward target
-        const turnAmount = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), this.AIM_SPEED * dt);
-        GameInput.moveSide = -turnAmount * 2;  // Use moveSide for turning
+        // Aggressive turning toward target
+        GameInput.moveSide = -Math.sign(angleDiff) * Math.min(Math.abs(angleDiff) * 3, 1.0);
         
-        // Shoot if aimed well enough
+        // Shoot if aimed well enough (more generous angle)
         const now = performance.now();
-        if (Math.abs(angleDiff) < 0.35 && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
+        if (Math.abs(angleDiff) < 0.4 && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
             GameInput.triggerAction('shoot');
             this.lastShootTime = now;
         }
         
-        // Keep moving forward while shooting (slower when aiming)
-        GameInput.moveForward = Math.abs(angleDiff) < 0.5 ? 0.7 : 0.4;
+        // Keep moving forward while shooting
+        // Slow down more when aiming at priority targets
+        const isPriorityTarget = targetPriority < 0;
+        GameInput.moveForward = isPriorityTarget ? 0.3 : (Math.abs(angleDiff) < 0.5 ? 0.7 : 0.5);
         
         return true;
     },
@@ -133,31 +150,49 @@ const AutoplayController = {
         // Only rescue if Gunther is wandering (not captured - we shoot for that)
         if (gunther.state !== 'wandering') return false;
         
-        // Check if any enemies are close - if so, stay in car and shoot
+        // CRITICAL: Check if area is COMPLETELY safe before considering exit
         if (enemies && car) {
             for (const e of enemies) {
                 const dist = Math.hypot(e.x - car.x, e.z - car.z);
-                if (dist < 20) {
-                    return false;  // Stay in car and let combat handle it
+                if (dist < this.SAFE_EXIT_RANGE) {
+                    // NOT SAFE - stay in car, drive toward Gunther while shooting
+                    if (inCar && isDriver) {
+                        // Drive toward Gunther's position
+                        const angleToGunther = Math.atan2(gunther.x - car.x, gunther.z - car.z);
+                        const angleDiff = this.normalizeAngle(angleToGunther - local.carRotation);
+                        
+                        if (Math.abs(angleDiff) > 0.3) {
+                            GameInput.moveSide = -Math.sign(angleDiff) * 0.8;
+                        }
+                        GameInput.moveForward = 0.6;  // Slower, focused on positioning
+                    }
+                    return true;  // Handled - don't progress, focus on rescue positioning
                 }
             }
         }
         
-        // Gunther is loose and no immediate threats - consider rescue
+        // Area is SAFE - all enemies far away
         if (inCar && car) {
             const distToCar = Math.hypot(gunther.x - car.x, gunther.z - car.z);
             
-            // Only exit if Gunther is very close
-            if (distToCar < 8) {
+            // Exit only if Gunther is close enough for quick grab
+            if (distToCar < 10) {
                 GameInput.triggerAction('enterExit');
                 return true;
             }
             
-            // Otherwise just drive closer to him
-            return false;
+            // Drive closer to him first
+            const angleToGunther = Math.atan2(gunther.x - car.x, gunther.z - car.z);
+            const angleDiff = this.normalizeAngle(angleToGunther - local.carRotation);
+            
+            if (Math.abs(angleDiff) > 0.2) {
+                GameInput.moveSide = -Math.sign(angleDiff) * 0.7;
+            }
+            GameInput.moveForward = 0.8;
+            return true;
         }
         
-        // On foot - grab Gunther
+        // On foot - SPRINT to Gunther and grab
         if (!inCar && player) {
             const dist = Math.hypot(gunther.x - player.position.x, gunther.z - player.position.z);
             
@@ -165,7 +200,7 @@ const AutoplayController = {
                 GameInput.triggerAction('holdHand');
             }
             
-            // Move toward Gunther
+            // Sprint toward Gunther
             this.moveToward({ x: gunther.x, z: gunther.z }, player.position, local);
             return true;
         }

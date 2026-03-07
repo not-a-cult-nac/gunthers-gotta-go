@@ -3,15 +3,28 @@
 // Used by: headless tests, browser autoplay
 
 const AI_CONFIG = {
+    // Combat
     SHOOT_RANGE: 50,
-    SHOOT_COOLDOWN: 0.15,  // seconds
-    GRAB_RANGE: 3.5,  // Must be < 4 (holdHand range in game-core)
-    CAR_ENTER_RANGE: 5
+    SHOOT_COOLDOWN: 0.15,        // seconds between shots
+    
+    // Interaction ranges
+    GRAB_RANGE: 3.5,             // Must be < 4 (holdHand range in game-core)
+    CAR_ENTER_RANGE: 5,
+    
+    // Human-like constraints (reaction times)
+    REACTION_TIME: 0.3,          // seconds to notice state changes (Gunther gone, enemy appeared)
+    AIM_TIME: 0.1,               // seconds to acquire target before first shot
 };
 
 class AIController {
     constructor() {
         this.lastShootTime = 0;
+        
+        // Reaction tracking
+        this.lastGuntherState = null;
+        this.stateChangeTime = 0;      // When we noticed the change
+        this.currentTarget = null;
+        this.targetAcquiredTime = 0;   // When we started aiming at current target
     }
     
     // Main decision function: state → inputs
@@ -23,23 +36,32 @@ class AIController {
             return {};
         }
         
+        // Track Gunther state changes for reaction time
+        if (gunther.state !== this.lastGuntherState) {
+            this.stateChangeTime = time;
+            this.lastGuntherState = gunther.state;
+        }
+        
+        // Check if we're still "reacting" to the state change
+        const reactionComplete = (time - this.stateChangeTime) >= AI_CONFIG.REACTION_TIME;
+        
         const inputs = {};
         
         if (player.inCar) {
-            this.decideInCar(state, inputs);
+            this.decideInCar(state, inputs, reactionComplete);
         } else {
-            this.decideOnFoot(state, inputs);
+            this.decideOnFoot(state, inputs, reactionComplete);
         }
         
         return inputs;
     }
     
-    decideInCar(state, inputs) {
+    decideInCar(state, inputs, reactionComplete) {
         const { gunther, car, goalZ } = state;
         const GOAL_Z = goalZ || 440;
         
-        // Check if we should exit
-        if (this.shouldExitCar(state)) {
+        // Check if we should exit (only after reaction time)
+        if (reactionComplete && this.shouldExitCar(state)) {
             inputs.exitCar = true;
             return;
         }
@@ -68,17 +90,17 @@ class AIController {
         return false;
     }
     
-    decideOnFoot(state, inputs) {
+    decideOnFoot(state, inputs, reactionComplete) {
         const { player, gunther, car } = state;
         
-        // Priority 1: Gunther captured - kill captor
+        // Priority 1: Gunther captured - kill captor (react immediately to this!)
         if (gunther.state === 'captured') {
             this.handleCapturedGunther(state, inputs);
             return;
         }
         
-        // Priority 2: Gunther loose - grab him
-        if (gunther.state === 'wandering' || gunther.state === 'trapped') {
+        // Priority 2: Gunther loose - grab him (after reaction time)
+        if ((gunther.state === 'wandering' || gunther.state === 'trapped') && reactionComplete) {
             this.handleLooseGunther(state, inputs);
             return;
         }
@@ -110,9 +132,17 @@ class AIController {
         const dz = captor.z - player.z;
         const dist = Math.hypot(dx, dz);
         
+        // Track target acquisition for aim time
+        if (this.currentTarget !== captor.id) {
+            this.currentTarget = captor.id;
+            this.targetAcquiredTime = time;
+        }
+        const aimReady = (time - this.targetAcquiredTime) >= AI_CONFIG.AIM_TIME;
+        
         // Shoot directly at captor (even at close range, min 0.3 to avoid point-blank issues)
         if (dist < AI_CONFIG.SHOOT_RANGE && 
             dist > 0.3 &&
+            aimReady &&
             time - this.lastShootTime > AI_CONFIG.SHOOT_COOLDOWN) {
             
             const dirX = dx / dist;
@@ -179,6 +209,14 @@ class AIController {
         }
         
         if (!nearest) return;
+        
+        // Track target acquisition for aim time
+        if (this.currentTarget !== nearest.id) {
+            this.currentTarget = nearest.id;
+            this.targetAcquiredTime = time;
+        }
+        const aimReady = (time - this.targetAcquiredTime) >= AI_CONFIG.AIM_TIME;
+        if (!aimReady) return;
         
         const dx = nearest.x - player.x;
         const dz = nearest.z - player.z;

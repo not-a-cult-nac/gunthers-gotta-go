@@ -377,12 +377,10 @@ const AutoplayController = {
         if (dist < 0.5) return;  // Already there
         
         // Move in WORLD space using forward/side combination
-        // This works regardless of which direction player is facing
         const nx = dx / dist;  // Normalized direction to target
         const nz = dz / dist;
         
         // Convert world direction to player-relative movement
-        // Player's forward is along Z when rotation=0
         const cos = Math.cos(rotation);
         const sin = Math.sin(rotation);
         
@@ -392,6 +390,13 @@ const AutoplayController = {
         
         GameInput.moveForward = localZ;
         GameInput.moveSide = localX;
+        
+        // Debug every 500ms
+        const now = performance.now();
+        if (!this.lastMoveDebug || now - this.lastMoveDebug > 500) {
+            console.log(`[AI] moveToward: dist=${dist.toFixed(1)}, fwd=${localZ.toFixed(2)}, side=${localX.toFixed(2)}`);
+            this.lastMoveDebug = now;
+        }
     },
     
     normalizeAngle(angle) {

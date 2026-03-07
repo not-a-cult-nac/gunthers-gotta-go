@@ -373,20 +373,25 @@ const AutoplayController = {
         const dx = target.x - from.x;
         const dz = target.z - from.z;
         const dist = Math.hypot(dx, dz);
-        const angle = Math.atan2(dx, dz);
-        const relAngle = this.normalizeAngle(angle - rotation);
-        const absAngle = Math.abs(relAngle);
         
-        // Simple: turn to face target, then walk forward
-        // NO strafing - just turn and go
+        if (dist < 0.5) return;  // Already there
         
-        // Turn toward target
-        const turnRate = Math.min(0.15, absAngle * 0.3);
-        GameInput.aimX = relAngle > 0 ? turnRate : -turnRate;
+        // Move in WORLD space using forward/side combination
+        // This works regardless of which direction player is facing
+        const nx = dx / dist;  // Normalized direction to target
+        const nz = dz / dist;
         
-        // Walk forward (always, turning will align us)
-        GameInput.moveForward = 1;
-        GameInput.moveSide = 0;  // No strafing!
+        // Convert world direction to player-relative movement
+        // Player's forward is along Z when rotation=0
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
+        
+        // Rotate world direction into player's local space
+        const localZ = nx * sin + nz * cos;   // Forward component
+        const localX = nx * cos - nz * sin;   // Strafe component
+        
+        GameInput.moveForward = localZ;
+        GameInput.moveSide = localX;
     },
     
     normalizeAngle(angle) {

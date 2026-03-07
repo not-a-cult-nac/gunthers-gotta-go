@@ -28,10 +28,11 @@ const AutoplayController = {
     // Tuning - MAXIMUM AGGRESSION
     SHOOT_RANGE: 50,           // Shoot enemies from further away
     SHOOT_COOLDOWN: 50,        // ms between shots (VERY fast!)
-    AIM_SPEED: 15,             // Maximum aiming speed
+    AIM_SPEED: 15,             // Maximum aiming speed  
     PRIORITY_RANGE: 40,        // Prioritize enemies this close
     SAFE_EXIT_RANGE: 60,       // Only exit car if ALL enemies are this far
-    AIM_TOLERANCE: 0.08,       // Tight aim - ~5° at most (was 0.6 = 34°!)
+    AIM_TOLERANCE: 0.15,       // ~9° - balance between accuracy and being able to shoot
+    PREEMPTIVE_RANGE: 15,      // Preemptively clear enemies this close even when Gunther is safe
     
     init() {
         console.log('[Autoplay] Controller initialized');
@@ -220,6 +221,12 @@ const AutoplayController = {
             else if (guntherNeedsRescue && distToGunther < 8) {
                 priority = -5000 + distToGunther;
                 if (this.debugLog) console.log(`[AI] CRITICAL: Enemy ${e.id} dist=${distToGunther.toFixed(1)}`);
+            }
+            // PREEMPTIVE: Enemy close to car even when Gunther is safe - KILL THEM FIRST!
+            // This prevents the "enemy 3m away when Gunther escapes" scenario
+            else if (distToCar < this.PREEMPTIVE_RANGE) {
+                priority = -3000 + distToCar;  // High priority, kill before they can grab
+                if (this.debugLog && distToCar < 10) console.log(`[AI] PREEMPTIVE: Enemy ${e.id} dist=${distToCar.toFixed(1)}`);
             }
             // Enemy heading toward Gunther (use velocity prediction)
             else if (guntherNeedsRescue && e.vx !== undefined && distToGunther < 20) {

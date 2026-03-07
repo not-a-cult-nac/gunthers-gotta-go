@@ -241,22 +241,38 @@ const AutoplayController = {
         
         // Area is SAFE - all enemies far away
         if (inCar && car) {
-            const distToCar = Math.hypot(gunther.x - car.x, gunther.z - car.z);
+            const distToGunther = Math.hypot(gunther.x - car.x, gunther.z - car.z);
             
             // Exit only if Gunther is close enough for quick grab
-            if (distToCar < 10) {
+            if (distToGunther < 10) {
                 GameInput.triggerAction('enterExit');
                 return true;
             }
             
-            // Drive closer to him first
+            // Drive toward Gunther
             const angleToGunther = Math.atan2(gunther.x - car.x, gunther.z - car.z);
             const angleDiff = this.normalizeAngle(angleToGunther - local.carRotation);
             
-            if (Math.abs(angleDiff) > 0.2) {
-                GameInput.moveSide = -Math.sign(angleDiff) * 0.7;
+            if (this.debugLog && performance.now() - this.lastDebugTime > 2000) {
+                console.log(`[AI] Rescue: driving to Gunther, dist=${distToGunther.toFixed(0)}, angle=${angleDiff.toFixed(2)}`);
+                this.lastDebugTime = performance.now();
             }
-            GameInput.moveForward = 0.8;
+            
+            // If Gunther is behind us (large angle), REVERSE toward him
+            if (Math.abs(angleDiff) > 2.0) {
+                GameInput.moveForward = -0.8;  // Reverse!
+                GameInput.moveSide = Math.sign(angleDiff) * 0.5;  // Turn while reversing
+            } else if (Math.abs(angleDiff) > 1.0) {
+                // Mostly behind - reverse slowly while turning hard
+                GameInput.moveForward = -0.4;
+                GameInput.moveSide = -Math.sign(angleDiff);
+            } else {
+                // Gunther is ahead - drive forward
+                GameInput.moveForward = 0.8;
+                if (Math.abs(angleDiff) > 0.2) {
+                    GameInput.moveSide = -Math.sign(angleDiff) * 0.7;
+                }
+            }
             return true;
         }
         

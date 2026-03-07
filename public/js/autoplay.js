@@ -384,6 +384,7 @@ const AutoplayController = {
         const dist = Math.hypot(dx, dz);
         const angle = Math.atan2(dx, dz);
         const relAngle = this.normalizeAngle(angle - rotation);
+        const absAngle = Math.abs(relAngle);
         
         // Debug: log movement
         const now = performance.now();
@@ -392,21 +393,26 @@ const AutoplayController = {
             this.lastMoveDebug = now;
         }
         
-        // If target is mostly in front, run forward
-        // If target is to the side or behind, strafe/turn aggressively
-        const cosAngle = Math.cos(relAngle);
-        const sinAngle = Math.sin(relAngle);
-        
-        // Always move forward if target is remotely in front
-        GameInput.moveForward = cosAngle > -0.3 ? 1 : 0;
-        
-        // Strafe toward target
-        if (Math.abs(sinAngle) > 0.1) {
-            GameInput.moveSide = sinAngle > 0 ? 1 : -1;  // Full strafe, not half
+        // Different strategies based on where target is:
+        if (absAngle < 1.0) {
+            // Target is in front (±60°) - run forward, maybe strafe
+            GameInput.moveForward = 1;
+            if (absAngle > 0.2) {
+                GameInput.moveSide = relAngle > 0 ? 0.5 : -0.5;
+            }
+        } else if (absAngle < 2.2) {
+            // Target is to the side (60-120°) - strafe toward it while turning
+            GameInput.moveSide = relAngle > 0 ? 1 : -1;
+            GameInput.moveForward = 0.3;  // Slight forward motion
+        } else {
+            // Target is behind (>120°) - walk backward while turning
+            GameInput.moveForward = -0.5;  // Walk backward
+            // Also strafe in direction that turns us toward target
+            GameInput.moveSide = relAngle > 0 ? 0.5 : -0.5;
         }
         
-        // Also turn toward target (helps camera/aim follow)
-        GameInput.aimX = Math.max(-0.1, Math.min(0.1, sinAngle * 0.5));
+        // Always turn toward target
+        GameInput.aimX = Math.max(-0.15, Math.min(0.15, relAngle * 0.3));
     },
     
     normalizeAngle(angle) {

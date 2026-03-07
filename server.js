@@ -113,6 +113,8 @@ class GameRoom {
             id: this.enemyIdCounter++,
             x: side * (20 + Math.random() * 25),
             z: minZ + Math.random() * (maxZ - minZ),
+            vx: 0,  // Velocity components for AI prediction
+            vz: 0,
             health: 2,
             hasGunther: false,
             speed: baseSpeed + Math.random() * (baseSpeed * 0.5)  // Base + up to 50% variance
@@ -352,13 +354,20 @@ class GameRoom {
             const distToCar = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
             const inRange = distToCar < ENEMY_DETECTION_RANGE;
             
+            // Reset velocity each frame (will be set below if moving)
+            enemy.vx = 0;
+            enemy.vz = 0;
+            
             if ((guntherVulnerable || guntherHeld) && !enemy.hasGunther && inRange) {
                 const dx = this.gunther.x - enemy.x;
                 const dz = this.gunther.z - enemy.z;
                 const dist = Math.hypot(dx, dz);
                 if (dist > 0) {
-                    enemy.x += (dx / dist) * enemy.speed * delta;
-                    enemy.z += (dz / dist) * enemy.speed * delta;
+                    // Track velocity for AI prediction
+                    enemy.vx = (dx / dist) * enemy.speed;
+                    enemy.vz = (dz / dist) * enemy.speed;
+                    enemy.x += enemy.vx * delta;
+                    enemy.z += enemy.vz * delta;
                 }
                 
                 // Can only capture if NOT holding hands
@@ -378,8 +387,10 @@ class GameRoom {
                 const dz = this.car.z - enemy.z;
                 const dist = Math.hypot(dx, dz);
                 if (dist > 0 && dist < ENEMY_DETECTION_RANGE) {
-                    enemy.x += (dx / dist) * enemy.speed * 0.3 * delta;
-                    enemy.z += (dz / dist) * enemy.speed * 0.3 * delta;
+                    enemy.vx = (dx / dist) * enemy.speed * 0.3;
+                    enemy.vz = (dz / dist) * enemy.speed * 0.3;
+                    enemy.x += enemy.vx * delta;
+                    enemy.z += enemy.vz * delta;
                 }
             }
         }
@@ -514,10 +525,39 @@ class GameRoom {
     }
     
     getState() {
+        // Add derived fields to enemies for AI
+        const enrichedEnemies = this.enemies.map(e => {
+            const distToCar = Math.hypot(e.x - this.car.x, e.z - this.car.z);
+            const distToGunther = Math.hypot(e.x - this.gunther.x, e.z - this.gunther.z);
+            const angleFromCar = Math.atan2(e.x - this.car.x, e.z - this.car.z);
+            return {
+                ...e,
+                distToCar,
+                distToGunther,
+                angleFromCar
+            };
+        });
+        
+        // Find nearest enemy to Gunther
+        let nearestEnemyToGunther = null;
+        let nearestDist = Infinity;
+        for (const e of enrichedEnemies) {
+            if (e.distToGunther < nearestDist && !e.hasGunther) {
+                nearestDist = e.distToGunther;
+                nearestEnemyToGunther = e.id;
+            }
+        }
+        
         return {
             car: this.car,
-            gunther: this.gunther,
-            enemies: this.enemies,
+            gunther: {
+                ...this.gunther,
+                distToCar: Math.hypot(this.gunther.x - this.car.x, this.gunther.z - this.car.z)
+            },
+            enemies: enrichedEnemies,
+            hazards: HAZARDS,  // Expose hazards for AI
+            nearestEnemyToGunther,
+            guntherInDanger: nearestDist < 15 && (this.gunther.state === 'wandering' || this.gunther.state === 'trapped'),
             gameState: this.gameState,
             players: Array.from(this.players.entries()).map(([id, p]) => ({
                 id, name: p.name, inCar: p.inCar, x: p.x, z: p.z, color: p.color, isDriver: p.isDriver
@@ -679,6 +719,12 @@ io.on('connection', (socket) => {
     socket.on('shoot', (data) => {
         if (!currentRoom) return;
         const result = currentRoom.shoot(socket.id, data.x, data.z, data.dirX, data.dirZ);
+        // Emit result to shooter for AI feedback
+        socket.emit('shootResult', { 
+            hit: !!result, 
+            enemyId: result?.id || null,
+            killed: result?.killed || false
+        });
         if (result) io.to(currentRoom.code).emit('enemyHit', result);
     });
     

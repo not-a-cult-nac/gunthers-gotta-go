@@ -1383,7 +1383,12 @@
                 camera.lookAt(car.position.x, car.position.y + 2, car.position.z);
             } else {
                 const runSpeed = 7 * delta;
-                playerRotation = -mouseX;
+                // Use AI target rotation if set, otherwise mouse
+                if (GameInput.targetRotation !== undefined) {
+                    playerRotation = GameInput.targetRotation;
+                } else {
+                    playerRotation = -mouseX;
+                }
                 
                 const forward = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
                 const right = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));

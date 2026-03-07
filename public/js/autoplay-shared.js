@@ -158,6 +158,11 @@ class BrowserAutoplay {
             GameInput.shootDirection = { x: inputs.shoot.dirX, z: inputs.shoot.dirZ };
             GameInput.triggerAction('shoot');
         }
+        
+        // Facing direction - set target rotation for 3D render
+        if (inputs.facingAngle !== undefined) {
+            GameInput.targetRotation = inputs.facingAngle;
+        }
     }
 }
 

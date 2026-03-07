@@ -26,6 +26,9 @@ class AIController {
         this.stateChangeTick = 0;      // Tick when we noticed the change
         this.currentTarget = null;
         this.targetAcquiredTick = 0;   // Tick when we started aiming at current target
+        
+        // Facing direction (radians, 0 = +Z, increases clockwise)
+        this.facingAngle = 0;
     }
     
     // Main decision function: state → inputs
@@ -56,6 +59,21 @@ class AIController {
         } else {
             this.decideOnFoot(state, inputs, reactionComplete);
         }
+        
+        // Set facing angle based on actions (for 3D render)
+        if (inputs.shoot) {
+            // Face shooting direction
+            this.facingAngle = Math.atan2(inputs.shoot.dirX, inputs.shoot.dirZ);
+        } else if (inputs.moveX !== undefined || inputs.moveZ !== undefined) {
+            // Face movement direction
+            const mx = inputs.moveX || 0;
+            const mz = inputs.moveZ || 0;
+            if (mx !== 0 || mz !== 0) {
+                this.facingAngle = Math.atan2(mx, mz);
+            }
+        }
+        
+        inputs.facingAngle = this.facingAngle;
         
         return inputs;
     }

@@ -8,13 +8,13 @@ const AutoplayController = {
     debugLog: true,  // Enable debug logging
     lastDebugTime: 0,
     
-    // Tuning - aggressive shooting, conservative rescue
+    // Tuning - MAXIMUM AGGRESSION
     SHOOT_RANGE: 50,           // Shoot enemies from further away
-    SHOOT_COOLDOWN: 80,        // ms between shots (faster!)
-    AIM_SPEED: 12,             // Much faster aiming
-    PRIORITY_RANGE: 35,        // Prioritize enemies this close
-    SAFE_EXIT_RANGE: 50,       // Only exit car if ALL enemies are this far
-    AIM_TOLERANCE: 0.5,        // Wider aim tolerance for faster shots
+    SHOOT_COOLDOWN: 50,        // ms between shots (VERY fast!)
+    AIM_SPEED: 15,             // Maximum aiming speed
+    PRIORITY_RANGE: 40,        // Prioritize enemies this close
+    SAFE_EXIT_RANGE: 60,       // Only exit car if ALL enemies are this far
+    AIM_TOLERANCE: 0.6,        // Wide aim tolerance - spray bullets!
     
     init() {
         console.log('[Autoplay] Controller initialized');

@@ -309,6 +309,20 @@
         let otherPlayers = new Map();
         let isDriver = false;
         let myPlayerId = null;
+        
+        // Debug test - call testMultiplayer() from console
+        window.testMultiplayer = function() {
+            console.log('=== MULTIPLAYER DEBUG ===');
+            console.log('My player ID:', myPlayerId);
+            console.log('Is driver:', isDriver);
+            console.log('Other players map size:', otherPlayers.size);
+            console.log('Other players:', Array.from(otherPlayers.keys()));
+            console.log('Seat occupants:', seatOccupants);
+            if (serverState) {
+                console.log('Server state players:', serverState.players);
+            }
+            return 'Check console for multiplayer state';
+        };
         let isInCar = true;
         let guntherHoldingHands = false;
         let gameStarted = false;
@@ -1065,18 +1079,24 @@
             // Gunther
             if (gunther && state.gunther) {
                 if (state.gunther.state === 'in_car') {
-                    // Gunther sits in middle of back seat
+                    // Gunther sits in middle of back seat - use local car position, no server sync
                     gunther.visible = true;
-                    const worldPos = new THREE.Vector3(GUNTHER_SEAT.x, GUNTHER_SEAT.y, GUNTHER_SEAT.z);
-                    worldPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y);
-                    worldPos.add(car.position);
-                    gunther.position.copy(worldPos);
-                    gunther.rotation.y = car.rotation.y;
+                    // Calculate position based on current client car position
+                    const seatPos = new THREE.Vector3(GUNTHER_SEAT.x, GUNTHER_SEAT.y, GUNTHER_SEAT.z);
+                    seatPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), carRotation);
+                    seatPos.add(car.position);
+                    gunther.position.copy(seatPos);
+                    gunther.rotation.y = carRotation;
                 } else {
+                    // Not in car - use server position with smoothing
                     gunther.visible = state.gunther.visible;
-                    gunther.position.x = state.gunther.x;
-                    gunther.position.z = state.gunther.z;
-                    gunther.position.y = getTerrainHeight(state.gunther.x, state.gunther.z);
+                    const targetX = state.gunther.x;
+                    const targetZ = state.gunther.z;
+                    const targetY = getTerrainHeight(targetX, targetZ);
+                    // Smooth interpolation
+                    gunther.position.x += (targetX - gunther.position.x) * 0.3;
+                    gunther.position.z += (targetZ - gunther.position.z) * 0.3;
+                    gunther.position.y += (targetY - gunther.position.y) * 0.3;
                     gunther.rotation.y = 0;
                 }
                 
@@ -1165,6 +1185,11 @@
                 }
             }
             
+            // Debug: log players array (remove after testing)
+            if (state.players.length > 1) {
+                console.log('Players:', state.players.map(p => ({ id: p.id.slice(-4), inCar: p.inCar, me: p.id === myPlayerId })));
+            }
+            
             // Render other players
             for (const p of state.players) {
                 if (p.id === myPlayerId) continue;  // Don't render self
@@ -1203,21 +1228,28 @@
                 }
                 
                 // Update position
-                if (p.inCar && seatOccupants[p.id] !== undefined) {
+                const seatIdx = seatOccupants[p.id];
+                if (p.inCar && seatIdx !== undefined) {
                     // Seated in jeep
                     mesh.visible = true;
-                    const seat = SEAT_POSITIONS[seatOccupants[p.id]];
+                    const seat = SEAT_POSITIONS[seatIdx];
                     // Position relative to car
                     const worldPos = new THREE.Vector3(seat.x, seat.y, seat.z);
                     worldPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y);
                     worldPos.add(car.position);
                     mesh.position.copy(worldPos);
                     mesh.rotation.y = car.rotation.y;
-                } else if (!p.inCar) {
+                    console.log('Seated player', p.id.slice(-4), 'at seat', seatIdx);
+                } else if (p.inCar) {
+                    // In car but no seat assigned - still show them at car position
+                    mesh.visible = true;
+                    mesh.position.copy(car.position);
+                    mesh.position.y += 2;
+                    console.log('Player in car but no seat:', p.id.slice(-4));
+                } else {
+                    // On foot
                     mesh.visible = true;
                     mesh.position.set(p.x, getTerrainHeight(p.x, p.z), p.z);
-                } else {
-                    mesh.visible = false;
                 }
             }
             

@@ -1,27 +1,33 @@
 #!/usr/bin/env node
-// Headless game runner - runs games without browser/socket
-// Usage: node test/headless.js [numGames] [seed]
+// Headless game runner - uses SHARED game-core and ai-core
+// This ensures headless and browser use identical logic
 
-const { GameSimulation } = require('../src/simulation');
-const { AIController } = require('../src/ai');
+const { createRNG, createInitialState, spawnEnemy, updateGame, GOAL_Z } = require('../src/shared/game-core');
+const { AIController } = require('../src/shared/ai-core');
 
 const FIXED_DELTA = 1/20;  // 20 FPS simulation
-const MAX_TIME = 120;       // Max 2 minutes per game
+const MAX_TIME = 120;      // Max 2 minutes per game
 
 function runGame(seed) {
-    const sim = new GameSimulation(seed);
-    const ai = new AIController();
+    const random = createRNG(seed);
+    let state = createInitialState();
+    state.time = 0;
     
+    // Spawn initial enemies
+    for (let i = 0; i < 5; i++) {
+        state.enemies.push(spawnEnemy(state, random));
+    }
+    state.gameState = 'playing';
+    
+    const ai = new AIController();
     const events = [];
     let lastGuntherState = 'in_car';
     
-    while (sim.gameState === 'playing' && sim.time < MAX_TIME) {
-        const state = sim.getState();
-        
-        // Track state changes for debugging
+    while (state.gameState === 'playing' && state.time < MAX_TIME) {
+        // Track state changes
         if (state.gunther.state !== lastGuntherState) {
             events.push({
-                time: sim.time.toFixed(1),
+                time: state.time.toFixed(1),
                 event: `gunther: ${lastGuntherState} → ${state.gunther.state}`,
                 playerInCar: state.player.inCar,
                 nearestEnemy: nearestEnemyDist(state).toFixed(1)
@@ -29,17 +35,20 @@ function runGame(seed) {
             lastGuntherState = state.gunther.state;
         }
         
-        // Get AI decision and apply it
-        const inputs = ai.decide(state);
-        sim.update(FIXED_DELTA, inputs);
+        // Get AI decision
+        const inputs = ai.decide({ ...state, goalZ: GOAL_Z });
+        
+        // Update game
+        const result = updateGame(state, FIXED_DELTA, inputs, random);
+        state = result.state;
     }
     
     return {
         seed,
-        result: sim.gameState,
-        time: sim.time.toFixed(1),
-        loseReason: sim.loseReason,
-        finalDistance: (sim.getState().goalZ - sim.car.z).toFixed(0),
+        result: state.gameState,
+        time: state.time.toFixed(1),
+        loseReason: state.loseReason,
+        finalDistance: (GOAL_Z - state.car.z).toFixed(0),
         events
     };
 }
@@ -54,7 +63,7 @@ function nearestEnemyDist(state) {
 }
 
 function runTests(numGames = 50, baseSeed = 12345) {
-    console.log(`\n🎮 Running ${numGames} headless games...\n`);
+    console.log(`\n🎮 Running ${numGames} headless games (shared core)...\n`);
     
     const results = {
         wins: 0,
@@ -87,7 +96,6 @@ function runTests(numGames = 50, baseSeed = 12345) {
     
     const elapsed = Date.now() - startTime;
     
-    // Report
     console.log('═══════════════════════════════════════════════════════');
     console.log(`  RESULTS: ${results.wins}/${numGames} wins (${(results.wins/numGames*100).toFixed(1)}%)`);
     console.log('═══════════════════════════════════════════════════════');
@@ -112,7 +120,6 @@ function runTests(numGames = 50, baseSeed = 12345) {
     
     console.log('═══════════════════════════════════════════════════════\n');
     
-    // Exit code for CI
     const passRate = results.wins / numGames;
     if (passRate < 0.8) {
         console.log('❌ FAIL: Win rate below 80%');
@@ -123,32 +130,36 @@ function runTests(numGames = 50, baseSeed = 12345) {
     }
 }
 
-// Single game replay for debugging
+// Single game replay
 function replayGame(seed) {
     console.log(`\n🔍 Replaying game with seed ${seed}...\n`);
     
-    const sim = new GameSimulation(seed);
-    const ai = new AIController();
+    const random = createRNG(seed);
+    let state = createInitialState();
     
+    for (let i = 0; i < 5; i++) {
+        state.enemies.push(spawnEnemy(state, random));
+    }
+    state.gameState = 'playing';
+    
+    const ai = new AIController();
     let frame = 0;
     
-    while (sim.gameState === 'playing' && sim.time < MAX_TIME) {
-        const state = sim.getState();
-        const inputs = ai.decide(state);
+    while (state.gameState === 'playing' && state.time < MAX_TIME) {
+        const inputs = ai.decide({ ...state, goalZ: GOAL_Z });
         
-        // Log every second
         if (frame % 20 === 0) {
             const inputStr = Object.keys(inputs).filter(k => inputs[k]).join(',') || 'none';
-            console.log(`t=${sim.time.toFixed(1)}s | car=(${state.car.x.toFixed(0)},${state.car.z.toFixed(0)}) | gunther=${state.gunther.state} | player.inCar=${state.player.inCar} | inputs=${inputStr}`);
+            console.log(`t=${state.time.toFixed(1)}s | car=(${state.car.x.toFixed(0)},${state.car.z.toFixed(0)}) | gunther=${state.gunther.state} | player.inCar=${state.player.inCar} | inputs=${inputStr}`);
         }
         
-        sim.update(FIXED_DELTA, inputs);
+        const result = updateGame(state, FIXED_DELTA, inputs, random);
+        state = result.state;
         frame++;
     }
     
-    const state = sim.getState();
-    console.log(`\n${sim.gameState === 'won' ? '✅ WIN' : '❌ LOSS'}: ${sim.loseReason || 'Reached goal!'}`);
-    console.log(`Final position: ${state.goalZ - state.car.z}m from goal`);
+    console.log(`\n${state.gameState === 'won' ? '✅ WIN' : '❌ LOSS'}: ${state.loseReason || 'Reached goal!'}`);
+    console.log(`Final position: ${(GOAL_Z - state.car.z).toFixed(0)}m from goal`);
 }
 
 // CLI

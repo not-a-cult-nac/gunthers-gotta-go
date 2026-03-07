@@ -289,17 +289,16 @@ const AutoplayController = {
     },
     
     returnToCar(car, player, inCar, rotation) {
+        // Debug: what are we getting?
+        console.log(`[AI] returnToCar called: car=${!!car}, player=${!!player}, inCar=${inCar}`);
+        
         if (!car || !player || inCar) return;
         
         const dx = car.x - player.position.x;
         const dz = car.z - player.position.z;
         const dist = Math.hypot(dx, dz);
         
-        // Debug: log occasionally
-        if (this.debugLog && performance.now() - this.lastReturnDebug > 2000) {
-            console.log(`[AI] Return to car: dist=${dist.toFixed(1)}, car=(${car.x.toFixed(0)},${car.z.toFixed(0)}), player=(${player.position.x.toFixed(0)},${player.position.z.toFixed(0)})`);
-            this.lastReturnDebug = performance.now();
-        }
+        console.log(`[AI] Return to car: dist=${dist.toFixed(1)}, car=(${car.x.toFixed(0)},${car.z.toFixed(0)}), player=(${player.position.x.toFixed(0)},${player.position.z.toFixed(0)})`);
         
         if (dist < 8) {
             GameInput.triggerAction('enterExit');

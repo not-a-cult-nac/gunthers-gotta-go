@@ -551,6 +551,7 @@
             document.getElementById('player-name').value = 'AutoBot';
             document.getElementById('autoplay-badge').style.display = 'block';
             AutoplayController.enable();
+            AutoplayController.registerSocketListeners(socket);  // Register for shoot feedback
             HumanInput.init();
             createRoom();
             // Auto-start game after room is created

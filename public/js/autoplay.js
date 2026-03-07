@@ -8,6 +8,13 @@ const AutoplayController = {
     debugLog: true,  // Enable debug logging
     lastDebugTime: 0,
     
+    // Shooting stats (updated via shootResult event)
+    stats: {
+        shots: 0,
+        hits: 0,
+        kills: 0
+    },
+    
     // Tuning - MAXIMUM AGGRESSION
     SHOOT_RANGE: 50,           // Shoot enemies from further away
     SHOOT_COOLDOWN: 50,        // ms between shots (VERY fast!)
@@ -18,6 +25,18 @@ const AutoplayController = {
     
     init() {
         console.log('[Autoplay] Controller initialized');
+    },
+    
+    // Call this to register shoot result listener
+    registerSocketListeners(socket) {
+        socket.on('shootResult', (result) => {
+            this.stats.shots++;
+            if (result.hit) this.stats.hits++;
+            if (result.killed) this.stats.kills++;
+            if (this.debugLog && result.hit) {
+                console.log(`[AI] HIT! Enemy ${result.enemyId}${result.killed ? ' KILLED!' : ''} (${this.stats.hits}/${this.stats.shots} = ${(this.stats.hits/this.stats.shots*100).toFixed(0)}%)`);
+            }
+        });
     },
     
     enable() {
@@ -91,19 +110,19 @@ const AutoplayController = {
         // Find best target with aggressive prioritization:
         // 1. Enemy that has Gunther (MUST kill immediately)
         // 2. Enemy close to Gunther who's wandering (prevent capture)
-        // 3. Enemy heading toward car/Gunther
+        // 3. Enemy heading toward Gunther (use velocity prediction)
         // 4. Closest enemy in range
         let target = null;
         let targetPriority = Infinity;
         
-        // Reference point: where should we defend?
+        // Use server-provided danger flag
         const guntherNeedsRescue = gunther && (gunther.state === 'wandering' || gunther.state === 'trapped');
-        const defendX = guntherNeedsRescue ? gunther.x : car.x;
-        const defendZ = guntherNeedsRescue ? gunther.z : car.z;
+        const guntherInDanger = state.guntherInDanger;
         
         for (const e of enemies) {
-            const distToCar = Math.hypot(e.x - car.x, e.z - car.z);
-            const distToDefend = Math.hypot(e.x - defendX, e.z - defendZ);
+            // Use server-provided distance calculations
+            const distToCar = e.distToCar || Math.hypot(e.x - car.x, e.z - car.z);
+            const distToGunther = e.distToGunther || Math.hypot(e.x - gunther.x, e.z - gunther.z);
             
             if (distToCar > this.SHOOT_RANGE) continue;
             
@@ -113,17 +132,26 @@ const AutoplayController = {
             if (e.hasGunther) {
                 priority = -10000;
             }
-            // Enemy very close to vulnerable Gunther (wandering or trapped) = critical
-            else if (guntherNeedsRescue) {
-                const distToGunther = Math.hypot(e.x - gunther.x, e.z - gunther.z);
-                if (distToGunther < 8) {
-                    priority = -5000 + distToGunther;  // Closer to Gunther = higher priority
-                    if (this.debugLog) console.log(`[AI] CRITICAL: Enemy ${e.id} is ${distToGunther.toFixed(1)} from vulnerable Gunther!`);
-                } else if (distToGunther < 15) {
+            // Enemy very close to vulnerable Gunther = critical
+            else if (guntherNeedsRescue && distToGunther < 8) {
+                priority = -5000 + distToGunther;
+                if (this.debugLog) console.log(`[AI] CRITICAL: Enemy ${e.id} dist=${distToGunther.toFixed(1)}`);
+            }
+            // Enemy heading toward Gunther (use velocity prediction)
+            else if (guntherNeedsRescue && e.vx !== undefined && distToGunther < 20) {
+                // Calculate if enemy is moving toward Gunther
+                const toGuntherX = gunther.x - e.x;
+                const toGuntherZ = gunther.z - e.z;
+                const dot = e.vx * toGuntherX + e.vz * toGuntherZ;
+                if (dot > 0) {
+                    // Moving toward Gunther - high priority
                     priority = -1000 + distToGunther;
-                } else if (distToGunther < 25) {
-                    priority = -100 + distToGunther;  // Still prioritize somewhat
+                } else {
+                    priority = -100 + distToGunther;
                 }
+            }
+            else if (guntherNeedsRescue && distToGunther < 25) {
+                priority = -100 + distToGunther;
             }
             // Close to car = high priority
             else if (distToCar < this.PRIORITY_RANGE) {

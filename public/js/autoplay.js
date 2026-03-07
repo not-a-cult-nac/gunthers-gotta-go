@@ -8,6 +8,7 @@ const AutoplayController = {
     debugLog: true,
     lastDebugTime: 0,
     lastReturnDebug: 0,
+    lastMoveDebug: 0,
     
     // Shooting stats
     stats: { shots: 0, hits: 0, kills: 0 },
@@ -375,8 +376,16 @@ const AutoplayController = {
     moveToward(target, from, rotation) {
         const dx = target.x - from.x;
         const dz = target.z - from.z;
+        const dist = Math.hypot(dx, dz);
         const angle = Math.atan2(dx, dz);
         const relAngle = this.normalizeAngle(angle - rotation);
+        
+        // Debug: log movement
+        const now = performance.now();
+        if (this.debugLog && now - this.lastMoveDebug > 2000) {
+            console.log(`[AI] moveToward: dist=${dist.toFixed(1)}, relAngle=${relAngle.toFixed(2)}`);
+            this.lastMoveDebug = now;
+        }
         
         // If target is mostly in front, run forward
         // If target is to the side or behind, strafe/turn aggressively

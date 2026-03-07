@@ -171,9 +171,18 @@ const AutoplayController = {
             this.lastDebugTime = now;
         }
         
-        // Keep moving forward while shooting
-        // Slow down more when aiming at priority targets
-        GameInput.moveForward = isPriorityTarget ? 0.2 : (Math.abs(angleDiff) < 0.5 ? 0.7 : 0.5);
+        // Movement strategy based on threat level
+        if (targetPriority < -4000) {
+            // CRITICAL threat (enemy about to grab Gunther) - STOP and turn to shoot!
+            GameInput.moveForward = 0;  // Don't drive away from the fight
+            GameInput.moveSide = -Math.sign(angleDiff);  // Maximum turn rate
+        } else if (isPriorityTarget) {
+            // High priority - slow down significantly
+            GameInput.moveForward = 0.2;
+        } else {
+            // Normal enemies - keep moving
+            GameInput.moveForward = Math.abs(angleDiff) < 0.5 ? 0.7 : 0.5;
+        }
         
         return true;
     },

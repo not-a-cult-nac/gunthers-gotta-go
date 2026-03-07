@@ -438,12 +438,18 @@ const AutoplayController = {
         const { car, gunther } = state;
         const { inCar, isDriver, carRotation, player } = local;
         
-        // If on foot and Gunther is safe, get back in car
+        // If on foot and Gunther is safe, get back in car!
         if (!inCar && gunther && gunther.state === 'in_car' && car && player) {
             const distToCar = Math.hypot(car.x - player.position.x, car.z - player.position.z);
             
-            if (distToCar < 5) {
+            if (this.debugLog && performance.now() - this.lastDebugTime > 1000) {
+                console.log(`[AI] Return to car: dist=${distToCar.toFixed(1)}, player=(${player.position.x.toFixed(1)},${player.position.z.toFixed(1)}), car=(${car.x.toFixed(1)},${car.z.toFixed(1)})`);
+                this.lastDebugTime = performance.now();
+            }
+            
+            if (distToCar < 8) {  // Increased from 5 to 8
                 GameInput.triggerAction('enterExit');
+                console.log('[AI] Triggering enterExit to get back in car!');
             } else {
                 this.moveToward({ x: car.x, z: car.z }, player.position, local);
             }
@@ -474,7 +480,8 @@ const AutoplayController = {
         if (dist > 0.5) {
             // Move in direction of target
             const angle = Math.atan2(dx, dz);
-            const playerAngle = local.carRotation || 0;
+            // Use playerRotation when on foot, carRotation when in car
+            const playerAngle = local.inCar ? local.carRotation : (local.playerRotation || 0);
             const relAngle = this.normalizeAngle(angle - playerAngle);
             
             // Forward/back based on whether target is in front

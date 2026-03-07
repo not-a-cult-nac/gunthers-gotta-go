@@ -538,7 +538,10 @@
             HumanInput.init();
             createRoom();
             // Auto-start game after room is created
-            socket.once('roomCreated', () => {
+            socket.once('roomCreated', (data) => {
+                // Set driver state for autoplay (creator is always driver)
+                isDriver = data.isDriver;
+                console.log('[Autoplay] Room created, isDriver:', isDriver);
                 setTimeout(() => socket.emit('startGame'), 500);
             });
         }

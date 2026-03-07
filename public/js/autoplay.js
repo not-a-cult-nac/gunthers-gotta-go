@@ -328,19 +328,16 @@ const AutoplayController = {
         GameInput.sprint = true;
         this.moveToward(targetEnemy, player.position, playerRotation);
         
-        // Also aim at enemy while moving
+        // Aggressive aiming - snap to target faster
         const aimDir = this.normalizeAngle(angleToEnemy - playerRotation);
-        GameInput.aimX = Math.max(-0.1, Math.min(0.1, aimDir * 0.4));
+        GameInput.aimX = Math.max(-0.15, Math.min(0.15, aimDir * 0.6));
         
-        // Shoot if in range and aimed
+        // Shoot more aggressively - higher tolerance, faster cooldown
         const now = performance.now();
-        if (dist < this.SHOOT_RANGE && angleDiff < this.AIM_TOLERANCE && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
+        if (dist < this.SHOOT_RANGE && angleDiff < 0.5 && now - this.lastShootTime > 50) {
             GameInput.triggerAction('shoot');
             this.lastShootTime = now;
             console.log(`[AI] SHOOTING captor at dist=${dist.toFixed(0)}`);
-        } else if (this.debugLog && now - this.lastDebugTime > 500) {
-            console.log(`[AI] Chasing captor dist=${dist.toFixed(0)}, angleDiff=${angleDiff.toFixed(2)}`);
-            this.lastDebugTime = now;
         }
     },
     

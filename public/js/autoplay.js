@@ -163,7 +163,24 @@ const AutoplayController = {
             return;
         }
         
-        // PRIORITY 2: Combat decisions
+        // PRIORITY 2: RESCUE GUNTHER if he's wandering/trapped!
+        // This is more important than shooting random enemies
+        if (!inCar && (gunther?.state === 'wandering' || gunther?.state === 'trapped')) {
+            const distToGunther = Math.hypot(gunther.x - player.position.x, gunther.z - player.position.z);
+            console.log(`[AI] Gunther needs rescue! dist=${distToGunther.toFixed(1)}`);
+            
+            if (distToGunther < 4) {
+                GameInput.triggerAction('holdHand');
+                console.log('[AI] Grabbing Gunther!');
+            } else {
+                // Sprint to Gunther!
+                GameInput.sprint = true;
+                this.moveToward(gunther, player.position, playerRotation);
+            }
+            return;  // DON'T shoot - focus on grabbing Gunther!
+        }
+        
+        // PRIORITY 3: Combat decisions
         const nearestEnemyDist = this.getNearestEnemyDist(enemies, inCar ? car : player);
         const hasThreats = nearestEnemyDist !== null && nearestEnemyDist < this.THREAT_RANGE;
         const isSafe = nearestEnemyDist === null || nearestEnemyDist > this.SAFE_RANGE;
@@ -181,23 +198,12 @@ const AutoplayController = {
             this.driveTowardGoal(carRotation, gunther, car);
             
         } else {
-            // On foot - SHOOT! Prioritize enemies near Gunther
+            // On foot - SHOOT enemies
             const shotFired = this.shootEnemies(enemies, player, playerRotation, gunther);
             
             // If no threats left, get back in car
             if (isSafe && !shotFired) {
                 this.returnToCar(car, player, false, playerRotation);
-            }
-            
-            // Also try to rescue Gunther if he's close and wandering
-            if (gunther?.state === 'wandering' || gunther?.state === 'trapped') {
-                const distToGunther = Math.hypot(gunther.x - player.position.x, gunther.z - player.position.z);
-                if (distToGunther < this.GUNTHER_RESCUE_RANGE) {
-                    this.moveToward(gunther, player.position, playerRotation);
-                    if (distToGunther < 4) {
-                        GameInput.triggerAction('holdHand');
-                    }
-                }
             }
         }
     },
@@ -255,9 +261,18 @@ const AutoplayController = {
         
         // Aim toward enemy - SMOOTH aiming, not flip-flopping!
         const aimDir = this.normalizeAngle(angleToEnemy - playerRotation);
-        // Proportional control: turn faster when far off, slower when close
-        // Cap at 0.08 to prevent overshooting
-        GameInput.aimX = Math.max(-0.08, Math.min(0.08, aimDir * 0.3));
+        
+        // Special case: if near ±π boundary (enemy behind us), always turn one direction
+        // to avoid oscillation at the boundary
+        let aimInput;
+        if (Math.abs(angleDiff) > 2.8) {
+            // Enemy is mostly behind us - commit to turning one direction
+            aimInput = 0.08 * (aimDir >= 0 ? 1 : -1);
+        } else {
+            // Normal proportional control
+            aimInput = Math.max(-0.08, Math.min(0.08, aimDir * 0.3));
+        }
+        GameInput.aimX = aimInput;
         
         // Shoot if aimed well enough
         if (angleDiff < this.AIM_TOLERANCE) {

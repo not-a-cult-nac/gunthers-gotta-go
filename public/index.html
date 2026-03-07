@@ -307,6 +307,8 @@
         let car, player, gunther, goal;
         let enemyMeshes = new Map();
         let otherPlayers = new Map();
+        let isDriver = false;
+        let myPlayerId = null;
         let isInCar = true;
         let guntherHoldingHands = false;
         let gameStarted = false;
@@ -462,6 +464,8 @@
         
         socket.on('roomCreated', (data) => {
             playerId = data.playerId;
+            myPlayerId = data.playerId;
+            isDriver = data.isDriver;
             document.getElementById('main-menu').style.display = 'none';
             document.getElementById('waiting-room').style.display = 'flex';
             document.getElementById('room-code-display').textContent = data.code;
@@ -469,6 +473,8 @@
         
         socket.on('roomJoined', (data) => {
             playerId = data.playerId;
+            myPlayerId = data.playerId;
+            isDriver = data.isDriver;
             document.getElementById('join-form').style.display = 'none';
             document.getElementById('waiting-room').style.display = 'flex';
             document.getElementById('room-code-display').textContent = data.code;
@@ -1051,6 +1057,59 @@
             const goalDist = Math.hypot(state.car.x, state.car.z - GOAL_Z);
             document.getElementById('distance').textContent = Math.round(goalDist);
             
+            // Render other players
+            for (const p of state.players) {
+                if (p.id === myPlayerId) continue;  // Don't render self
+                
+                let mesh = otherPlayers.get(p.id);
+                if (!mesh) {
+                    // Create player mesh with their color
+                    mesh = new THREE.Group();
+                    
+                    // Body
+                    const bodyMat = new THREE.MeshStandardMaterial({ color: p.color || '#888888' });
+                    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.2), bodyMat);
+                    body.position.y = 1;
+                    body.castShadow = true;
+                    mesh.add(body);
+                    
+                    // Head
+                    const head = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.3),
+                        new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+                    );
+                    head.position.y = 2;
+                    mesh.add(head);
+                    
+                    // Name label (simplified - just a colored hat)
+                    const hat = new THREE.Mesh(
+                        new THREE.ConeGeometry(0.35, 0.5, 8),
+                        bodyMat
+                    );
+                    hat.position.y = 2.4;
+                    mesh.add(hat);
+                    
+                    scene.add(mesh);
+                    otherPlayers.set(p.id, mesh);
+                }
+                
+                // Update position
+                if (p.inCar) {
+                    mesh.visible = false;  // Hide when in car
+                } else {
+                    mesh.visible = true;
+                    mesh.position.set(p.x, getTerrainHeight(p.x, p.z), p.z);
+                }
+            }
+            
+            // Remove disconnected players
+            for (const [id, mesh] of otherPlayers) {
+                if (!state.players.find(p => p.id === id)) {
+                    scene.remove(mesh);
+                    otherPlayers.delete(id);
+                }
+            }
+            
             // Game over
             if (state.gameState === 'won') {
                 endGame(true, "Gunther delivered safely! He immediately ran toward the gift shop's knife display.");
@@ -1104,31 +1163,35 @@
             if (!gameStarted || !car) return;
             
             if (isInCar) {
-                const driveSpeed = 12 * delta;
-                const turnSpeed = 2 * delta;
+                // Only the driver can control the car
+                if (isDriver) {
+                    const driveSpeed = 12 * delta;
+                    const turnSpeed = 2 * delta;
+                    
+                    if (keys['KeyA']) carRotation += turnSpeed;
+                    if (keys['KeyD']) carRotation -= turnSpeed;
+                    
+                    const forward = new THREE.Vector3(Math.sin(carRotation), 0, Math.cos(carRotation));
+                    
+                    if (keys['KeyW']) {
+                        car.position.x += forward.x * driveSpeed;
+                        car.position.z += forward.z * driveSpeed;
+                    }
+                    if (keys['KeyS']) {
+                        car.position.x -= forward.x * driveSpeed * 0.5;
+                        car.position.z -= forward.z * driveSpeed * 0.5;
+                    }
+                    
+                    car.position.x = Math.max(-80, Math.min(80, car.position.x));
+                    car.position.z = Math.max(START_Z - 20, Math.min(GOAL_Z + 20, car.position.z));
+                    car.position.y = getTerrainHeight(car.position.x, car.position.z);
+                    car.rotation.y = carRotation;
+                    
+                    socket.emit('carUpdate', { x: car.position.x, z: car.position.z, rotation: carRotation });
+                }
                 
-                if (keys['KeyA']) carRotation += turnSpeed;
-                if (keys['KeyD']) carRotation -= turnSpeed;
-                
+                // Camera (everyone in car sees same view)
                 const forward = new THREE.Vector3(Math.sin(carRotation), 0, Math.cos(carRotation));
-                
-                if (keys['KeyW']) {
-                    car.position.x += forward.x * driveSpeed;
-                    car.position.z += forward.z * driveSpeed;
-                }
-                if (keys['KeyS']) {
-                    car.position.x -= forward.x * driveSpeed * 0.5;
-                    car.position.z -= forward.z * driveSpeed * 0.5;
-                }
-                
-                car.position.x = Math.max(-80, Math.min(80, car.position.x));
-                car.position.z = Math.max(START_Z - 20, Math.min(GOAL_Z + 20, car.position.z));
-                car.position.y = getTerrainHeight(car.position.x, car.position.z);
-                car.rotation.y = carRotation;
-                
-                socket.emit('carUpdate', { x: car.position.x, z: car.position.z, rotation: carRotation });
-                
-                // Camera
                 const camBack = new THREE.Vector3(-forward.x * 14, 9, -forward.z * 14);
                 camera.position.copy(car.position).add(camBack);
                 camera.lookAt(car.position.x, car.position.y + 2, car.position.z);

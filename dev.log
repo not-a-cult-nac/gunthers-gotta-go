@@ -9,3 +9,9 @@
 {"ts":"2026-03-06T17:52:48.268Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
 {"ts":"2026-03-06T20:22:41.860Z","level":"info","msg":"Container stopped","data":{"name":"ggg"}}
 {"ts":"2026-03-06T20:22:51.654Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
+{"ts":"2026-03-07T00:23:17.096Z","level":"info","msg":"Container stopped","data":{"name":"ggg"}}
+{"ts":"2026-03-07T00:23:26.891Z","level":"info","msg":"Container cleaned up","data":{"name":"ggg"}}
+{"ts":"2026-03-07T00:23:26.892Z","level":"info","msg":"Removed generated compose dir","data":{"dir":"/home/user/.jump.sh/ggg"}}
+{"ts":"2026-03-07T00:23:36.374Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
+{"ts":"2026-03-07T00:23:58.567Z","level":"info","msg":"Container stopped","data":{"name":"ggg"}}
+{"ts":"2026-03-07T00:24:00.579Z","level":"info","msg":"Container started","data":{"name":"ggg"}}

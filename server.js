@@ -67,6 +67,7 @@ class GameRoom {
     constructor(code) {
         this.code = code;
         this.players = new Map();
+        this.driver = null;
         this.car = { x: 0, z: START_Z, rotation: 0 };
         this.gunther = { x: 0, z: START_Z, state: 'in_car', visible: false, captorId: null, trapPos: null, holderId: null, strain: 0 };
         this.enemies = [];
@@ -519,8 +520,9 @@ class GameRoom {
             enemies: this.enemies,
             gameState: this.gameState,
             players: Array.from(this.players.entries()).map(([id, p]) => ({
-                id, name: p.name, inCar: p.inCar, x: p.x, z: p.z
+                id, name: p.name, inCar: p.inCar, x: p.x, z: p.z, color: p.color, isDriver: p.isDriver
             })),
+            driver: this.driver,
             lastQuote: this.lastQuote,
             loseReason: this.loseReason,
             goalZ: GOAL_Z
@@ -544,10 +546,20 @@ io.on('connection', (socket) => {
         const room = new GameRoom(code);
         rooms.set(code, room);
         
-        room.players.set(socket.id, { name: playerName || 'Player', inCar: true, x: 0, z: START_Z });
+        const playerIndex = room.players.size;
+        const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12']; // Blue, Red, Green, Orange
+        room.players.set(socket.id, { 
+            name: playerName || 'Player', 
+            inCar: true, 
+            x: 0, 
+            z: START_Z,
+            color: colors[playerIndex % 4],
+            isDriver: true  // First player is driver
+        });
+        room.driver = socket.id;
         currentRoom = room;
         socket.join(code);
-        socket.emit('roomCreated', { code, playerId: socket.id });
+        socket.emit('roomCreated', { code, playerId: socket.id, isDriver: true });
         console.log(`Room ${code} created`);
     });
     
@@ -556,11 +568,20 @@ io.on('connection', (socket) => {
         if (!room) return socket.emit('error', 'Room not found');
         if (room.players.size >= 4) return socket.emit('error', 'Room is full');
         
-        room.players.set(socket.id, { name: playerName || 'Player', inCar: true, x: room.car.x, z: room.car.z });
+        const playerIndex = room.players.size;
+        const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12'];
+        room.players.set(socket.id, { 
+            name: playerName || 'Player', 
+            inCar: true, 
+            x: room.car.x, 
+            z: room.car.z,
+            color: colors[playerIndex % 4],
+            isDriver: false
+        });
         currentRoom = room;
         socket.join(code);
-        socket.emit('roomJoined', { code, playerId: socket.id });
-        io.to(code).emit('playerJoined', { id: socket.id, name: playerName });
+        socket.emit('roomJoined', { code, playerId: socket.id, isDriver: false });
+        io.to(code).emit('playerJoined', { id: socket.id, name: playerName, color: colors[playerIndex % 4] });
         console.log(`${playerName} joined ${code}`);
     });
     
@@ -573,6 +594,8 @@ io.on('connection', (socket) => {
     
     socket.on('carUpdate', (data) => {
         if (!currentRoom || currentRoom.gameState !== 'playing') return;
+        // Only the driver can update car position
+        if (currentRoom.driver !== socket.id) return;
         currentRoom.car.x = data.x;
         currentRoom.car.z = data.z;
         currentRoom.car.rotation = data.rotation;

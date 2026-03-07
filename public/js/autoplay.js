@@ -188,6 +188,12 @@ const AutoplayController = {
         // (captured = shoot the enemy holding him, not rescue)
         if (gunther.state !== 'wandering' && gunther.state !== 'trapped') return false;
         
+        if (this.debugLog && performance.now() - this.lastDebugTime > 2000) {
+            const distToCar = car ? Math.hypot(gunther.x - car.x, gunther.z - car.z) : -1;
+            console.log(`[AI] Rescue: Gunther=${gunther.state}, dist=${distToCar.toFixed(1)}, inCar=${inCar}, enemies=${enemies?.length || 0}`);
+            this.lastDebugTime = performance.now();
+        }
+        
         // CRITICAL: Check if area is COMPLETELY safe before considering exit
         if (enemies && car) {
             for (const e of enemies) {

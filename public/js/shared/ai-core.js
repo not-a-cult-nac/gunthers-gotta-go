@@ -5,45 +5,49 @@
 const AI_CONFIG = {
     // Combat
     SHOOT_RANGE: 50,
-    SHOOT_COOLDOWN: 0.15,        // seconds between shots
+    SHOOT_COOLDOWN_TICKS: 9,     // ticks between shots (~0.15s at 60fps)
     
     // Interaction ranges
     GRAB_RANGE: 3.5,             // Must be < 4 (holdHand range in game-core)
     CAR_ENTER_RANGE: 5,
     
-    // Human-like constraints (reaction times)
-    REACTION_TIME: 0.3,          // seconds to notice state changes (Gunther gone, enemy appeared)
-    AIM_TIME: 0.1,               // seconds to acquire target before first shot
+    // Human-like constraints (in ticks, 1 tick = 1 simulation frame)
+    REACTION_TICKS: 18,          // ticks to notice state changes (~0.3s at 60fps)
+    AIM_TICKS: 6,                // ticks to acquire target before first shot (~0.1s at 60fps)
 };
 
 class AIController {
     constructor() {
-        this.lastShootTime = 0;
+        this.tickCount = 0;
+        this.lastShootTick = 0;
         
         // Reaction tracking
         this.lastGuntherState = null;
-        this.stateChangeTime = 0;      // When we noticed the change
+        this.stateChangeTick = 0;      // Tick when we noticed the change
         this.currentTarget = null;
-        this.targetAcquiredTime = 0;   // When we started aiming at current target
+        this.targetAcquiredTick = 0;   // Tick when we started aiming at current target
     }
     
     // Main decision function: state → inputs
     // Returns the same format for both headless and browser
     decide(state) {
-        const { player, gunther, enemies, car, gameState, time } = state;
+        const { player, gunther, enemies, car, gameState } = state;
         
         if (gameState !== 'playing') {
             return {};
         }
         
+        // Increment tick counter
+        this.tickCount++;
+        
         // Track Gunther state changes for reaction time
         if (gunther.state !== this.lastGuntherState) {
-            this.stateChangeTime = time;
+            this.stateChangeTick = this.tickCount;
             this.lastGuntherState = gunther.state;
         }
         
         // Check if we're still "reacting" to the state change
-        const reactionComplete = (time - this.stateChangeTime) >= AI_CONFIG.REACTION_TIME;
+        const reactionComplete = (this.tickCount - this.stateChangeTick) >= AI_CONFIG.REACTION_TICKS;
         
         const inputs = {};
         
@@ -123,7 +127,7 @@ class AIController {
     }
     
     handleCapturedGunther(state, inputs) {
-        const { player, gunther, enemies, time } = state;
+        const { player, gunther, enemies } = state;
         
         const captor = enemies.find(e => e.id === gunther.captorId);
         if (!captor) return;
@@ -135,20 +139,20 @@ class AIController {
         // Track target acquisition for aim time
         if (this.currentTarget !== captor.id) {
             this.currentTarget = captor.id;
-            this.targetAcquiredTime = time;
+            this.targetAcquiredTick = this.tickCount;
         }
-        const aimReady = (time - this.targetAcquiredTime) >= AI_CONFIG.AIM_TIME;
+        const aimReady = (this.tickCount - this.targetAcquiredTick) >= AI_CONFIG.AIM_TICKS;
         
         // Shoot directly at captor (even at close range, min 0.3 to avoid point-blank issues)
         if (dist < AI_CONFIG.SHOOT_RANGE && 
             dist > 0.3 &&
             aimReady &&
-            time - this.lastShootTime > AI_CONFIG.SHOOT_COOLDOWN) {
+            (this.tickCount - this.lastShootTick) >= AI_CONFIG.SHOOT_COOLDOWN_TICKS) {
             
             const dirX = dx / dist;
             const dirZ = dz / dist;
             inputs.shoot = { dirX, dirZ };
-            this.lastShootTime = time;
+            this.lastShootTick = this.tickCount;
         }
         
         // Move toward captor
@@ -193,9 +197,9 @@ class AIController {
     }
     
     shootNearestEnemy(state, inputs) {
-        const { player, enemies, time } = state;
+        const { player, enemies } = state;
         
-        if (time - this.lastShootTime < AI_CONFIG.SHOOT_COOLDOWN) return;
+        if ((this.tickCount - this.lastShootTick) < AI_CONFIG.SHOOT_COOLDOWN_TICKS) return;
         
         let nearest = null;
         let nearestDist = Infinity;
@@ -213,9 +217,9 @@ class AIController {
         // Track target acquisition for aim time
         if (this.currentTarget !== nearest.id) {
             this.currentTarget = nearest.id;
-            this.targetAcquiredTime = time;
+            this.targetAcquiredTick = this.tickCount;
         }
-        const aimReady = (time - this.targetAcquiredTime) >= AI_CONFIG.AIM_TIME;
+        const aimReady = (this.tickCount - this.targetAcquiredTick) >= AI_CONFIG.AIM_TICKS;
         if (!aimReady) return;
         
         const dx = nearest.x - player.x;
@@ -223,7 +227,7 @@ class AIController {
         const dirX = dx / nearestDist;
         const dirZ = dz / nearestDist;
         inputs.shoot = { dirX, dirZ };
-        this.lastShootTime = time;
+        this.lastShootTick = this.tickCount;
     }
     
     // Movement: returns moveX, moveZ in WORLD space (not player-relative)

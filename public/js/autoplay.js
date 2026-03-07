@@ -7,6 +7,7 @@ const AutoplayController = {
     lastShootTime: 0,
     debugLog: true,
     lastDebugTime: 0,
+    lastReturnDebug: 0,
     
     // Shooting stats
     stats: { shots: 0, hits: 0, kills: 0 },
@@ -294,9 +295,15 @@ const AutoplayController = {
         const dz = car.z - player.position.z;
         const dist = Math.hypot(dx, dz);
         
-        if (dist < 6) {
+        // Debug: log occasionally
+        if (this.debugLog && performance.now() - this.lastReturnDebug > 2000) {
+            console.log(`[AI] Return to car: dist=${dist.toFixed(1)}, car=(${car.x.toFixed(0)},${car.z.toFixed(0)}), player=(${player.position.x.toFixed(0)},${player.position.z.toFixed(0)})`);
+            this.lastReturnDebug = performance.now();
+        }
+        
+        if (dist < 8) {
             GameInput.triggerAction('enterExit');
-            console.log('[AI] Getting back in car');
+            console.log('[AI] Getting back in car!');
         } else {
             this.moveToward({ x: car.x, z: car.z }, player.position, rotation);
         }

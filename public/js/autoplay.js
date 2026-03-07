@@ -377,32 +377,16 @@ const AutoplayController = {
         const relAngle = this.normalizeAngle(angle - rotation);
         const absAngle = Math.abs(relAngle);
         
-        // Debug: log movement
-        const now = performance.now();
-        if (this.debugLog && now - this.lastMoveDebug > 2000) {
-            console.log(`[AI] moveToward: dist=${dist.toFixed(1)}, relAngle=${relAngle.toFixed(2)}`);
-            this.lastMoveDebug = now;
-        }
+        // Simple: turn to face target, then walk forward
+        // NO strafing - just turn and go
         
-        // Strategy: Always run forward, but turn AGGRESSIVELY toward target
-        // The key is to get the camera pointing at the target, then run forward
-        
-        // Move forward unless target is directly behind (then briefly pause while turning)
-        if (absAngle < 2.5) {
-            GameInput.moveForward = 1;  // Full speed forward
-        } else {
-            GameInput.moveForward = 0;  // Pause while doing 180
-        }
-        
-        // Strafe to help turn toward target
-        if (absAngle > 0.3) {
-            GameInput.moveSide = relAngle > 0 ? 1 : -1;
-        }
-        
-        // AGGRESSIVE camera turn toward target - this is the key!
-        // Max out the turn rate when target is behind us
-        const turnRate = Math.min(0.3, absAngle * 0.2);  // More aggressive turn
+        // Turn toward target
+        const turnRate = Math.min(0.15, absAngle * 0.3);
         GameInput.aimX = relAngle > 0 ? turnRate : -turnRate;
+        
+        // Walk forward (always, turning will align us)
+        GameInput.moveForward = 1;
+        GameInput.moveSide = 0;  // No strafing!
     },
     
     normalizeAngle(angle) {

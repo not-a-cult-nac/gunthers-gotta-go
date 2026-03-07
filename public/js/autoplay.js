@@ -173,12 +173,18 @@ const AutoplayController = {
         
         // Movement strategy based on threat level
         if (targetPriority < -4000) {
-            // CRITICAL threat (enemy about to grab Gunther) - STOP and turn to shoot!
-            GameInput.moveForward = 0;  // Don't drive away from the fight
-            GameInput.moveSide = -Math.sign(angleDiff);  // Maximum turn rate
+            // CRITICAL threat (enemy about to grab Gunther) - REVERSE toward them!
+            // If target is behind us (large angle), reversing brings us closer
+            if (Math.abs(angleDiff) > 1.5) {
+                GameInput.moveForward = -0.5;  // Reverse!
+                GameInput.moveSide = Math.sign(angleDiff);  // Turn while reversing
+            } else {
+                GameInput.moveForward = 0;  // Stop and turn
+                GameInput.moveSide = -Math.sign(angleDiff);  // Maximum turn rate
+            }
         } else if (isPriorityTarget) {
             // High priority - slow down significantly
-            GameInput.moveForward = 0.2;
+            GameInput.moveForward = Math.abs(angleDiff) > 1.0 ? -0.3 : 0.2;  // Reverse if target behind
         } else {
             // Normal enemies - keep moving
             GameInput.moveForward = Math.abs(angleDiff) < 0.5 ? 0.7 : 0.5;

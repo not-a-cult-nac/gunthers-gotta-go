@@ -15,3 +15,5 @@
 {"ts":"2026-03-07T00:23:36.374Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
 {"ts":"2026-03-07T00:23:58.567Z","level":"info","msg":"Container stopped","data":{"name":"ggg"}}
 {"ts":"2026-03-07T00:24:00.579Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
+{"ts":"2026-03-07T02:11:55.061Z","level":"info","msg":"Container stopped","data":{"name":"ggg (autoplay)"}}
+{"ts":"2026-03-07T02:12:19.078Z","level":"info","msg":"Container started","data":{"name":"ggg (autoplay)"}}

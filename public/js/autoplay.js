@@ -358,11 +358,16 @@ const AutoplayController = {
     },
     
     returnToCar(car, player, rotation) {
+        // Debug: always log when called
+        console.log(`[AI] returnToCar called: car=${!!car} (${car?.x?.toFixed(0)}, ${car?.z?.toFixed(0)}), player=${!!player} (${player?.position?.x?.toFixed(0)}, ${player?.position?.z?.toFixed(0)})`);
+        
         if (!car || !player) return;
         
         const dx = car.x - player.position.x;
         const dz = car.z - player.position.z;
         const dist = Math.hypot(dx, dz);
+        
+        console.log(`[AI] Return dist=${dist.toFixed(1)}, rotation=${rotation?.toFixed(2)}`);
         
         if (dist < 8) {
             GameInput.triggerAction('enterExit');

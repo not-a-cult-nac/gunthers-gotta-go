@@ -92,7 +92,7 @@ class BrowserAutoplay {
         // Get decision from shared AI
         const inputs = this.ai.decide(state);
         
-        // Debug logging
+        // Debug logging (throttled to 1/second)
         const now = performance.now();
         if (this.debugLog && now - this.lastLogTime > 1000) {
             console.log(`[AI] inCar=${inCar}, gunther=${state.gunther.state}, inputs=${JSON.stringify(inputs)}`);
@@ -110,10 +110,10 @@ class BrowserAutoplay {
         GameInput.steer = 0;
         GameInput.accelerate = 0;
         
-        // Driving
+        // Driving - use moveForward and moveSide (game uses these, not accelerate/steer)
         if (inputs.drive !== undefined) {
-            GameInput.accelerate = inputs.drive;
-            GameInput.steer = inputs.steer || 0;
+            GameInput.moveForward = inputs.drive;  // 1 = forward, -1 = reverse
+            GameInput.moveSide = inputs.steer || 0;  // -1 = left, 1 = right
         }
         
         // Walking - convert world-space moveX/moveZ to player-relative

@@ -110,9 +110,9 @@ class AIController {
         const dz = captor.z - player.z;
         const dist = Math.hypot(dx, dz);
         
-        // Shoot directly at captor
+        // Shoot directly at captor (even at close range, min 0.3 to avoid point-blank issues)
         if (dist < AI_CONFIG.SHOOT_RANGE && 
-            dist > 1 &&
+            dist > 0.3 &&
             time - this.lastShootTime > AI_CONFIG.SHOOT_COOLDOWN) {
             
             const dirX = dx / dist;
@@ -172,7 +172,7 @@ class AIController {
         
         for (const enemy of enemies) {
             const dist = Math.hypot(enemy.x - player.x, enemy.z - player.z);
-            if (dist < AI_CONFIG.SHOOT_RANGE && dist > 1 && dist < nearestDist) {
+            if (dist < AI_CONFIG.SHOOT_RANGE && dist > 0.3 && dist < nearestDist) {
                 nearestDist = dist;
                 nearest = enemy;
             }

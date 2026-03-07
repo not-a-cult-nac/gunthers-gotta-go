@@ -841,20 +841,48 @@
                     light.position.set(h.x, 3, h.z);
                     scene.add(light);
                 } else if (h.type === 'cliff') {
+                    // Rocky cliff edge
                     const edge = new THREE.Mesh(
-                        new THREE.BoxGeometry(h.radius * 2, 1, 4),
-                        new THREE.MeshStandardMaterial({ color: 0x8b4513 })
+                        new THREE.BoxGeometry(h.radius * 2.5, 2, 5),
+                        new THREE.MeshStandardMaterial({ color: 0x4a3728 })
                     );
-                    edge.position.set(h.x, 0.5, h.z);
+                    edge.position.set(h.x, 1, h.z);
                     scene.add(edge);
                     
+                    // THE VOID - big obvious black area
                     const void_ = new THREE.Mesh(
-                        new THREE.PlaneGeometry(h.radius * 2, 25),
-                        new THREE.MeshStandardMaterial({ color: 0x000022 })
+                        new THREE.PlaneGeometry(h.radius * 3, 40),
+                        new THREE.MeshStandardMaterial({ color: 0x000000 })
                     );
                     void_.rotation.x = -Math.PI / 2;
-                    void_.position.set(h.x, -0.1, h.z + 14);
+                    void_.position.set(h.x, -0.5, h.z + 22);
                     scene.add(void_);
+                    
+                    // Warning stripes on the edge
+                    const warningMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xff6600, emissiveIntensity: 0.3 });
+                    for (let i = -h.radius; i <= h.radius; i += 5) {
+                        const stripe = new THREE.Mesh(
+                            new THREE.BoxGeometry(1.5, 0.5, 3),
+                            warningMat
+                        );
+                        stripe.position.set(h.x + i, 2.2, h.z - 1);
+                        scene.add(stripe);
+                    }
+                    
+                    // Danger sign
+                    const sign = new THREE.Mesh(
+                        new THREE.BoxGeometry(2, 3, 0.2),
+                        new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.4 })
+                    );
+                    sign.position.set(h.x, 4, h.z - 4);
+                    scene.add(sign);
+                    
+                    const signPole = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.1, 0.1, 5),
+                        new THREE.MeshStandardMaterial({ color: 0x444444 })
+                    );
+                    signPole.position.set(h.x, 2.5, h.z - 4);
+                    scene.add(signPole);
                 } else if (h.type === 'trap') {
                     const trap = new THREE.Mesh(
                         new THREE.TorusGeometry(0.6, 0.12, 8, 12),

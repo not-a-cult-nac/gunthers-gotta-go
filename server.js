@@ -341,11 +341,17 @@ class GameRoom {
         }
         
         // Enemy AI
+        const ENEMY_DETECTION_RANGE = 50; // Only chase if within this range of car
+        
         for (const enemy of this.enemies) {
             const guntherVulnerable = this.gunther.state === 'wandering' || this.gunther.state === 'trapped';
             const guntherHeld = this.gunther.state === 'holding_hands';
             
-            if ((guntherVulnerable || guntherHeld) && !enemy.hasGunther) {
+            // Check if enemy is close enough to the car to be "active"
+            const distToCar = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
+            const inRange = distToCar < ENEMY_DETECTION_RANGE;
+            
+            if ((guntherVulnerable || guntherHeld) && !enemy.hasGunther && inRange) {
                 const dx = this.gunther.x - enemy.x;
                 const dz = this.gunther.z - enemy.z;
                 const dist = Math.hypot(dx, dz);
@@ -366,11 +372,11 @@ class GameRoom {
                     this.lastQuote = "Ooh! You have ze candies? I come viz you!";
                 }
             } else if (!enemy.hasGunther) {
-                // Wander toward car
+                // Only wander toward car if somewhat close, otherwise stay put
                 const dx = this.car.x - enemy.x;
                 const dz = this.car.z - enemy.z;
                 const dist = Math.hypot(dx, dz);
-                if (dist > 0 && dist < 80) {
+                if (dist > 0 && dist < ENEMY_DETECTION_RANGE) {
                     enemy.x += (dx / dist) * enemy.speed * 0.3 * delta;
                     enemy.z += (dz / dist) * enemy.speed * 0.3 * delta;
                 }

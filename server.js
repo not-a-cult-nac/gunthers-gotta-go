@@ -520,7 +520,7 @@ class GameRoom {
             enemies: this.enemies,
             gameState: this.gameState,
             players: Array.from(this.players.entries()).map(([id, p]) => ({
-                id, name: p.name, inCar: p.inCar, x: p.x, z: p.z, color: p.color, isDriver: p.isDriver
+                id, name: p.name, inCar: p.inCar, x: p.x, z: p.z, color: p.color, isDriver: p.isDriver, seatIndex: p.seatIndex
             })),
             driver: this.driver,
             lastQuote: this.lastQuote,
@@ -617,6 +617,7 @@ io.on('connection', (socket) => {
         if (player) {
             player.inCar = false;
             player.isDriver = false;
+            player.seatIndex = undefined;  // Clear seat assignment
             player.x = currentRoom.car.x + 4;
             player.z = currentRoom.car.z;
             
@@ -642,9 +643,24 @@ io.on('connection', (socket) => {
             if (dist < 6) {
                 player.inCar = true;
                 
-                // First person in becomes driver
+                // Assign seat based on entry order (find first empty seat)
+                const takenSeats = new Set();
+                for (const [id, p] of currentRoom.players) {
+                    if (p.inCar && p.seatIndex !== undefined && id !== socket.id) {
+                        takenSeats.add(p.seatIndex);
+                    }
+                }
+                // Find first available seat (0-3)
+                for (let i = 0; i < 4; i++) {
+                    if (!takenSeats.has(i)) {
+                        player.seatIndex = i;
+                        break;
+                    }
+                }
+                
+                // First person in (seat 0) becomes driver
                 const playersInCar = Array.from(currentRoom.players.values()).filter(p => p.inCar);
-                if (playersInCar.length === 1) {
+                if (playersInCar.length === 1 || player.seatIndex === 0) {
                     // This player is first in, they become driver
                     currentRoom.driver = socket.id;
                     for (const [id, p] of currentRoom.players) {

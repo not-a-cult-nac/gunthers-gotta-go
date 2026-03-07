@@ -1229,13 +1229,11 @@
                 isDriver = me.isDriver;
             }
             
-            // Assign seats to players in car
+            // Use server-assigned seat indices
             seatOccupants = {};
-            let seatIndex = 0;
             for (const p of state.players) {
-                if (p.inCar && seatIndex < SEAT_POSITIONS.length) {
-                    seatOccupants[p.id] = seatIndex;
-                    seatIndex++;
+                if (p.inCar && p.seatIndex !== undefined) {
+                    seatOccupants[p.id] = p.seatIndex;
                 }
             }
             

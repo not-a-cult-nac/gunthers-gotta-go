@@ -25,8 +25,8 @@ const AutoplayController = {
     
     // Tuning
     SHOOT_RANGE: 40,           // Max shooting distance
-    SHOOT_COOLDOWN: 80,        // ms between shots
-    AIM_TOLERANCE: 0.2,        // Radians - acceptable aim error
+    SHOOT_COOLDOWN: 60,        // ms between shots (faster!)
+    AIM_TOLERANCE: 0.35,       // Radians - more forgiving aim
     THREAT_RANGE: 25,          // Exit car when enemy this close
     SAFE_RANGE: 35,            // Get back in car when all enemies this far
     GUNTHER_RESCUE_RANGE: 15,  // Distance to rescue wandering Gunther
@@ -185,14 +185,15 @@ const AutoplayController = {
             return;
         }
         
-        // STATE 3: Enemy has Gunther (captured) → KILL THAT ENEMY
+        // STATE 3: Enemy has Gunther (captured) → KILL THAT ENEMY FAST
         if (gunther?.state === 'captured') {
             if (inCar) {
                 console.log('[AI] Gunther captured! Exiting car to fight');
                 GameInput.triggerAction('enterExit');
                 return;
             }
-            // Find and kill the enemy holding Gunther
+            // Sprint and shoot! Don't waste time aiming perfectly
+            GameInput.sprint = true;
             this.shootEnemyWithGunther(enemies, gunther, player, playerRotation);
             return;
         }

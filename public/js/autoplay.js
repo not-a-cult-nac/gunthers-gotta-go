@@ -186,8 +186,17 @@ const AutoplayController = {
             // High priority - slow down significantly
             GameInput.moveForward = Math.abs(angleDiff) > 1.0 ? -0.3 : 0.2;  // Reverse if target behind
         } else {
-            // Normal enemies - keep moving
-            GameInput.moveForward = Math.abs(angleDiff) < 0.5 ? 0.7 : 0.5;
+            // Normal enemies - move carefully
+            // Slow down if there are many enemies to clear them first
+            const enemyCount = enemies ? enemies.filter(e => 
+                Math.hypot(e.x - car.x, e.z - car.z) < this.SHOOT_RANGE
+            ).length : 0;
+            
+            if (enemyCount >= 3) {
+                GameInput.moveForward = 0.3;  // Slow down with many enemies
+            } else {
+                GameInput.moveForward = Math.abs(angleDiff) < 0.5 ? 0.6 : 0.4;
+            }
         }
         
         return true;

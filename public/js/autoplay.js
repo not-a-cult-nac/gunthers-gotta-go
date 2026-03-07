@@ -389,7 +389,7 @@ const AutoplayController = {
         const localX = nx * cos - nz * sin;   // Strafe component
         
         GameInput.moveForward = localZ;
-        GameInput.moveSide = localX;
+        GameInput.moveSide = -localX;  // Negate - game uses opposite strafe convention
         
         // Debug every 500ms
         const now = performance.now();

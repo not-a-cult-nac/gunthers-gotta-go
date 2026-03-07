@@ -16,6 +16,9 @@ const GameInput = {
     _holdHand: false,
     _releaseHand: false,
     
+    // AI can set custom shoot direction (dirX, dirZ)
+    shootDirection: null,
+    
     // State
     isAutoplay: false,
     

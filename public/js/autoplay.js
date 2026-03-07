@@ -283,19 +283,14 @@ const AutoplayController = {
         }
         GameInput.aimX = aimInput;
         
-        // Shoot if aimed well enough
-        if (angleDiff < this.AIM_TOLERANCE) {
-            GameInput.triggerAction('shoot');
-            this.lastShootTime = now;
-            console.log(`[AI] SHOOTING enemy at dist=${dist.toFixed(0)}, angle=${angleDiff.toFixed(2)}`);
-            return true;
-        } else {
-            if (this.debugLog && now - this.lastDebugTime > 500) {
-                console.log(`[AI] Aiming at enemy dist=${dist.toFixed(0)}, angleDiff=${angleDiff.toFixed(2)}`);
-            }
-        }
-        
-        return false;
+        // Shoot directly at target with custom direction!
+        const dx = enemy.x - player.position.x;
+        const dz = enemy.z - player.position.z;
+        GameInput.shootDirection = { x: dx / dist, z: dz / dist };
+        GameInput.triggerAction('shoot');
+        this.lastShootTime = now;
+        console.log(`[AI] SHOOTING enemy at dist=${dist.toFixed(0)}`);
+        return true;
     },
     
     // Specifically target the enemy that has captured Gunther
@@ -328,13 +323,11 @@ const AutoplayController = {
         GameInput.sprint = true;
         this.moveToward(targetEnemy, player.position, playerRotation);
         
-        // Aggressive aiming - snap to target faster
-        const aimDir = this.normalizeAngle(angleToEnemy - playerRotation);
-        GameInput.aimX = Math.max(-0.15, Math.min(0.15, aimDir * 0.6));
-        
-        // Shoot more aggressively - higher tolerance, faster cooldown
+        // Shoot directly at target using custom direction!
         const now = performance.now();
-        if (dist < this.SHOOT_RANGE && angleDiff < 0.5 && now - this.lastShootTime > 50) {
+        if (dist < this.SHOOT_RANGE && dist > 1 && now - this.lastShootTime > 60) {
+            // Set custom shoot direction - directly at captor
+            GameInput.shootDirection = { x: dx / dist, z: dz / dist };
             GameInput.triggerAction('shoot');
             this.lastShootTime = now;
             console.log(`[AI] SHOOTING captor at dist=${dist.toFixed(0)}`);

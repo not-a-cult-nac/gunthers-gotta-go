@@ -15,6 +15,16 @@ const AutoplayController = {
         kills: 0
     },
     
+    // Run tracking
+    run: {
+        startTime: null,
+        guntherEscapes: 0,
+        guntherCaptures: 0,
+        guntherRescues: 0,
+        carExits: 0,
+        events: []  // Timeline of key events
+    },
+    
     // Tuning - MAXIMUM AGGRESSION
     SHOOT_RANGE: 50,           // Shoot enemies from further away
     SHOOT_COOLDOWN: 50,        // ms between shots (VERY fast!)
@@ -54,13 +64,87 @@ const AutoplayController = {
     },
     
     updateState(state) {
-        // Log Gunther state changes
+        // Start run tracking
+        if (!this.run.startTime && state.gameState === 'playing') {
+            this.run.startTime = Date.now();
+            this.run.events = [];
+            this.run.guntherEscapes = 0;
+            this.run.guntherCaptures = 0;
+            this.run.guntherRescues = 0;
+            this.run.carExits = 0;
+            this.stats = { shots: 0, hits: 0, kills: 0 };
+        }
+        
+        const elapsed = this.run.startTime ? ((Date.now() - this.run.startTime) / 1000).toFixed(1) : 0;
+        
+        // Log Gunther state changes with spatial context
         if (this.lastState && state.gunther && this.lastState.gunther) {
             if (this.lastState.gunther.state !== state.gunther.state) {
-                console.log(`[AI] Gunther state changed: ${this.lastState.gunther.state} -> ${state.gunther.state}`);
+                const car = state.car;
+                const g = state.gunther;
+                const from = this.lastState.gunther.state;
+                const to = state.gunther.state;
+                
+                // Track events
+                if (to === 'wandering' && from === 'in_car') this.run.guntherEscapes++;
+                if (to === 'captured') this.run.guntherCaptures++;
+                if (to === 'in_car' && from !== 'in_car') this.run.guntherRescues++;
+                
+                const event = {
+                    t: elapsed,
+                    from, to,
+                    guntherDist: car.distToGunther?.toFixed(1),
+                    turnToGunther: (car.turnToGunther * 180 / Math.PI)?.toFixed(0),
+                    nearestEnemy: state.nearestEnemyDist?.toFixed(1),
+                    goalDist: car.distToGoal?.toFixed(0)
+                };
+                this.run.events.push(event);
+                
+                console.log(`[AI] @${elapsed}s Gunther: ${from} -> ${to}`, {
+                    dist: event.guntherDist,
+                    turn: event.turnToGunther + '°',
+                    enemy: event.nearestEnemy,
+                    goal: event.goalDist + 'm'
+                });
             }
         }
+        
+        // End-of-run report
+        if (this.lastState?.gameState === 'playing' && state.gameState !== 'playing') {
+            this.generateReport(state);
+        }
+        
         this.lastState = state;
+    },
+    
+    generateReport(state) {
+        const duration = ((Date.now() - this.run.startTime) / 1000).toFixed(1);
+        const report = {
+            result: state.gameState,
+            duration: duration + 's',
+            finalGoalDist: state.car.distToGoal?.toFixed(0) + 'm',
+            gunther: {
+                escapes: this.run.guntherEscapes,
+                captures: this.run.guntherCaptures,
+                rescues: this.run.guntherRescues
+            },
+            combat: {
+                shots: this.stats.shots,
+                hits: this.stats.hits,
+                kills: this.stats.kills,
+                accuracy: this.stats.shots > 0 ? ((this.stats.hits / this.stats.shots) * 100).toFixed(0) + '%' : 'N/A'
+            },
+            carExits: this.run.carExits,
+            events: this.run.events
+        };
+        
+        console.log('═══════════════════════════════════════');
+        console.log('[AI] RUN REPORT:', state.gameState === 'won' ? '🏆 WIN' : '❌ LOSS');
+        console.log(JSON.stringify(report, null, 2));
+        console.log('═══════════════════════════════════════');
+        
+        // Reset for next run
+        this.run.startTime = null;
     },
     
     update(dt, localState) {

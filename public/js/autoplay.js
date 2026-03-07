@@ -1,19 +1,15 @@
 // AutoplayController - AI that plays the game
-// Writes to GameInput, reads game state from socket updates
+// CRITICAL: Can only shoot ON FOOT, not in car!
 
 const AutoplayController = {
     enabled: false,
     lastState: null,
     lastShootTime: 0,
-    debugLog: true,  // Enable debug logging
+    debugLog: true,
     lastDebugTime: 0,
     
-    // Shooting stats (updated via shootResult event)
-    stats: {
-        shots: 0,
-        hits: 0,
-        kills: 0
-    },
+    // Shooting stats
+    stats: { shots: 0, hits: 0, kills: 0 },
     
     // Run tracking
     run: {
@@ -22,108 +18,102 @@ const AutoplayController = {
         guntherCaptures: 0,
         guntherRescues: 0,
         carExits: 0,
-        events: []  // Timeline of key events
+        events: []
     },
     
-    // Tuning - MAXIMUM AGGRESSION
-    SHOOT_RANGE: 50,           // Shoot enemies from further away
-    SHOOT_COOLDOWN: 50,        // ms between shots (VERY fast!)
-    AIM_SPEED: 15,             // Maximum aiming speed  
-    PRIORITY_RANGE: 40,        // Prioritize enemies this close
-    SAFE_EXIT_RANGE: 60,       // Only exit car if ALL enemies are this far
-    AIM_TOLERANCE: 0.15,       // ~9° - balance between accuracy and being able to shoot
-    PREEMPTIVE_RANGE: 15,      // Preemptively clear enemies this close even when Gunther is safe
+    // Tuning
+    SHOOT_RANGE: 40,           // Max shooting distance
+    SHOOT_COOLDOWN: 80,        // ms between shots
+    AIM_TOLERANCE: 0.2,        // Radians - acceptable aim error
+    THREAT_RANGE: 25,          // Exit car when enemy this close
+    SAFE_RANGE: 35,            // Get back in car when all enemies this far
+    GUNTHER_RESCUE_RANGE: 15,  // Distance to rescue wandering Gunther
     
     init() {
         console.log('[Autoplay] Controller initialized');
     },
     
-    // Call this to register shoot result listener
     registerSocketListeners(socket) {
         socket.on('shootResult', (result) => {
             this.stats.shots++;
             if (result.hit) this.stats.hits++;
             if (result.killed) this.stats.kills++;
             if (this.debugLog && result.hit) {
-                console.log(`[AI] HIT! Enemy ${result.enemyId}${result.killed ? ' KILLED!' : ''} (${this.stats.hits}/${this.stats.shots} = ${(this.stats.hits/this.stats.shots*100).toFixed(0)}%)`);
+                console.log(`[AI] HIT! ${result.killed ? 'KILLED!' : ''} (${this.stats.hits}/${this.stats.shots})`);
             }
         });
     },
     
-    enable() {
-        this.enabled = true;
-        GameInput.isAutoplay = true;
-        GameInput.clear();
-        console.log('[Autoplay] Enabled');
+    toggle() {
+        this.enabled = !this.enabled;
+        console.log(`[Autoplay] ${this.enabled ? 'Enabled' : 'Disabled'}`);
+        if (this.enabled) this.resetRun();
+        return this.enabled;
     },
     
-    disable() {
-        this.enabled = false;
-        GameInput.isAutoplay = false;
-        GameInput.clear();
-        console.log('[Autoplay] Disabled');
+    enable() {
+        if (!this.enabled) {
+            this.enabled = true;
+            console.log('[Autoplay] Enabled');
+            this.resetRun();
+        }
+    },
+    
+    resetRun() {
+        this.run = {
+            startTime: performance.now(),
+            guntherEscapes: 0,
+            guntherCaptures: 0,
+            guntherRescues: 0,
+            carExits: 0,
+            events: []
+        };
+        this.stats = { shots: 0, hits: 0, kills: 0 };
+        this.lastGuntherState = null;
     },
     
     updateState(state) {
-        // Start run tracking
-        if (!this.run.startTime && state.gameState === 'playing') {
-            this.run.startTime = Date.now();
-            this.run.events = [];
-            this.run.guntherEscapes = 0;
-            this.run.guntherCaptures = 0;
-            this.run.guntherRescues = 0;
-            this.run.carExits = 0;
-            this.stats = { shots: 0, hits: 0, kills: 0 };
-        }
+        this.lastState = state;
         
-        const elapsed = this.run.startTime ? ((Date.now() - this.run.startTime) / 1000).toFixed(1) : 0;
-        
-        // Log Gunther state changes with spatial context
-        if (this.lastState && state.gunther && this.lastState.gunther) {
-            if (this.lastState.gunther.state !== state.gunther.state) {
+        // Track Gunther state changes
+        if (state.gunther && state.gunther.state !== this.lastGuntherState) {
+            const prev = this.lastGuntherState;
+            const curr = state.gunther.state;
+            this.lastGuntherState = curr;
+            
+            if (prev) {
+                const elapsed = ((performance.now() - this.run.startTime) / 1000).toFixed(1);
+                
+                // Count events
+                if (curr === 'wandering' && prev === 'in_car') this.run.guntherEscapes++;
+                if (curr === 'captured') this.run.guntherCaptures++;
+                if (curr === 'in_car' && (prev === 'holding_hands' || prev === 'wandering')) this.run.guntherRescues++;
+                
+                // Log
                 const car = state.car;
                 const g = state.gunther;
-                const from = this.lastState.gunther.state;
-                const to = state.gunther.state;
+                const enemies = state.enemies || [];
+                const distToCar = car ? Math.hypot(g.x - car.x, g.z - car.z).toFixed(1) : '?';
+                const nearestEnemy = enemies.length ? Math.min(...enemies.map(e => Math.hypot(e.x - g.x, e.z - g.z))).toFixed(1) : 'none';
                 
-                // Track events
-                if (to === 'wandering' && from === 'in_car') this.run.guntherEscapes++;
-                if (to === 'captured') this.run.guntherCaptures++;
-                if (to === 'in_car' && from !== 'in_car') this.run.guntherRescues++;
+                console.log(`[AI] @${elapsed}s Gunther: ${prev} -> ${curr} (dist=${distToCar}, enemy=${nearestEnemy})`);
                 
-                const event = {
+                this.run.events.push({
                     t: elapsed,
-                    from, to,
-                    guntherDist: car.distToGunther?.toFixed(1),
-                    turnToGunther: (car.turnToGunther * 180 / Math.PI)?.toFixed(0),
-                    nearestEnemy: state.nearestEnemyDist?.toFixed(1),
-                    goalDist: car.distToGoal?.toFixed(0)
-                };
-                this.run.events.push(event);
-                
-                console.log(`[AI] @${elapsed}s Gunther: ${from} -> ${to}`, {
-                    dist: event.guntherDist,
-                    turn: event.turnToGunther + '°',
-                    enemy: event.nearestEnemy,
-                    goal: event.goalDist + 'm'
+                    from: prev,
+                    to: curr,
+                    guntherDist: distToCar,
+                    nearestEnemy: nearestEnemy
                 });
             }
         }
-        
-        // End-of-run report
-        if (this.lastState?.gameState === 'playing' && state.gameState !== 'playing') {
-            this.generateReport(state);
-        }
-        
-        this.lastState = state;
     },
     
-    generateReport(state) {
-        const duration = ((Date.now() - this.run.startTime) / 1000).toFixed(1);
+    endRun(result) {
+        const duration = ((performance.now() - this.run.startTime) / 1000).toFixed(1);
         const report = {
-            result: state.gameState,
-            duration: duration + 's',
-            finalGoalDist: state.car.distToGoal?.toFixed(0) + 'm',
+            result: result,
+            duration: `${duration}s`,
             gunther: {
                 escapes: this.run.guntherEscapes,
                 captures: this.run.guntherCaptures,
@@ -133,19 +123,18 @@ const AutoplayController = {
                 shots: this.stats.shots,
                 hits: this.stats.hits,
                 kills: this.stats.kills,
-                accuracy: this.stats.shots > 0 ? ((this.stats.hits / this.stats.shots) * 100).toFixed(0) + '%' : 'N/A'
+                accuracy: this.stats.shots > 0 ? `${(this.stats.hits/this.stats.shots*100).toFixed(0)}%` : 'N/A'
             },
             carExits: this.run.carExits,
             events: this.run.events
         };
         
         console.log('═══════════════════════════════════════');
-        console.log('[AI] RUN REPORT:', state.gameState === 'won' ? '🏆 WIN' : '❌ LOSS');
+        console.log(`[AI] RUN REPORT: ${result === 'won' ? '✅ WIN' : '❌ LOSS'}`);
         console.log(JSON.stringify(report, null, 2));
         console.log('═══════════════════════════════════════');
         
-        // Reset for next run
-        this.run.startTime = null;
+        this.resetRun();
     },
     
     update(dt, localState) {
@@ -153,355 +142,170 @@ const AutoplayController = {
         
         const state = this.lastState;
         const { car, gunther, enemies } = state;
-        const { carRotation, inCar, isDriver, player } = localState;
+        const { inCar, isDriver, player, carRotation, playerRotation } = localState;
         
-        // Debug state every 3 seconds
-        if (this.debugLog && performance.now() - this.lastDebugTime > 3000) {
-            console.log(`[AI] State: gunther=${gunther?.state}, enemies=${enemies?.length || 0}, inCar=${inCar}, isDriver=${isDriver}`);
-            this.lastDebugTime = performance.now();
-        }
-        
-        // Reset movement
+        // Reset inputs
         GameInput.moveForward = 0;
         GameInput.moveSide = 0;
+        GameInput.aimX = 0;
         
-        // STRATEGY: Stay in car and shoot. Only exit if Gunther needs hand-holding rescue.
-        
-        // Priority 1: If we have Gunther by hand, get back to car ASAP
-        if (this.handleGuntherReturn(dt, state, localState)) return;
-        
-        // Priority 2: ALWAYS try to shoot enemies if we're in the car
-        const shotFired = this.handleCombat(dt, state, localState);
-        
-        // Priority 3: If Gunther is loose and close, consider grabbing (but only if no immediate threats)
-        if (!shotFired && this.handleGuntherRescue(dt, state, localState)) return;
-        
-        // Priority 4: Drive toward goal while shooting
-        this.handleProgress(dt, state, localState);
-    },
-    
-    handleCombat(dt, state, local) {
-        const { enemies, car, gunther } = state;
-        const { inCar, isDriver, carRotation } = local;
-        
-        if (!inCar || !isDriver || !enemies || !car) {
-            if (this.debugLog && performance.now() - this.lastDebugTime > 2000) {
-                console.log(`[AI] Combat skipped: inCar=${inCar}, isDriver=${isDriver}, enemies=${enemies?.length || 0}, car=${!!car}`);
-                this.lastDebugTime = performance.now();
-            }
-            return false;
-        }
-        
-        // Find best target with aggressive prioritization:
-        // 1. Enemy that has Gunther (MUST kill immediately)
-        // 2. Enemy close to Gunther who's wandering (prevent capture)
-        // 3. Enemy heading toward Gunther (use velocity prediction)
-        // 4. Closest enemy in range
-        let target = null;
-        let targetPriority = Infinity;
-        
-        // Use server-provided danger flag
-        const guntherNeedsRescue = gunther && (gunther.state === 'wandering' || gunther.state === 'trapped');
-        const guntherInDanger = state.guntherInDanger;
-        
-        for (const e of enemies) {
-            // Use server-provided distance calculations
-            const distToCar = e.distToCar || Math.hypot(e.x - car.x, e.z - car.z);
-            const distToGunther = e.distToGunther || Math.hypot(e.x - gunther.x, e.z - gunther.z);
-            
-            if (distToCar > this.SHOOT_RANGE) continue;
-            
-            let priority = distToCar;
-            
-            // Enemy has Gunther = ABSOLUTE priority
-            if (e.hasGunther) {
-                priority = -10000;
-            }
-            // Enemy very close to vulnerable Gunther = critical
-            else if (guntherNeedsRescue && distToGunther < 8) {
-                priority = -5000 + distToGunther;
-                if (this.debugLog) console.log(`[AI] CRITICAL: Enemy ${e.id} dist=${distToGunther.toFixed(1)}`);
-            }
-            // PREEMPTIVE: Enemy close to car even when Gunther is safe - KILL THEM FIRST!
-            // This prevents the "enemy 3m away when Gunther escapes" scenario
-            else if (distToCar < this.PREEMPTIVE_RANGE) {
-                priority = -3000 + distToCar;  // High priority, kill before they can grab
-                if (this.debugLog && distToCar < 10) console.log(`[AI] PREEMPTIVE: Enemy ${e.id} dist=${distToCar.toFixed(1)}`);
-            }
-            // Enemy heading toward Gunther (use velocity prediction)
-            else if (guntherNeedsRescue && e.vx !== undefined && distToGunther < 20) {
-                // Calculate if enemy is moving toward Gunther
-                const toGuntherX = gunther.x - e.x;
-                const toGuntherZ = gunther.z - e.z;
-                const dot = e.vx * toGuntherX + e.vz * toGuntherZ;
-                if (dot > 0) {
-                    // Moving toward Gunther - high priority
-                    priority = -1000 + distToGunther;
-                } else {
-                    priority = -100 + distToGunther;
-                }
-            }
-            else if (guntherNeedsRescue && distToGunther < 25) {
-                priority = -100 + distToGunther;
-            }
-            // Close to car = high priority
-            else if (distToCar < this.PRIORITY_RANGE) {
-                priority = distToCar - 200;
-            }
-            // In range but far = still valid target
-            else {
-                priority = distToCar;
-            }
-            
-            if (priority < targetPriority) {
-                targetPriority = priority;
-                target = e;
-            }
-        }
-        
-        if (!target) {
-            if (this.debugLog && performance.now() - this.lastDebugTime > 2000) {
-                console.log('[AI] No targets in range');
-                this.lastDebugTime = performance.now();
-            }
-            return false;
-        }
-        
-        // Aim at target
-        const targetAngle = Math.atan2(target.x - car.x, target.z - car.z);
-        const angleDiff = this.normalizeAngle(targetAngle - carRotation);
-        const distToTarget = Math.hypot(target.x - car.x, target.z - car.z);
-        const isPriorityTarget = targetPriority < 0;  // Negative priority = high priority target
-        
-        // Very aggressive turning toward target
-        GameInput.moveSide = -Math.sign(angleDiff) * Math.min(Math.abs(angleDiff) * 5, 1.0);
-        
-        // Shoot with wider tolerance - spray and pray against priority targets
-        const now = performance.now();
-        const aimTolerance = isPriorityTarget ? this.AIM_TOLERANCE * 1.5 : this.AIM_TOLERANCE;
-        if (Math.abs(angleDiff) < aimTolerance && now - this.lastShootTime > this.SHOOT_COOLDOWN) {
-            GameInput.triggerAction('shoot');
-            this.lastShootTime = now;
-            if (this.debugLog) {
-                console.log(`[AI] SHOOTING at enemy ${target.id} (dist=${distToTarget.toFixed(1)}, angle=${angleDiff.toFixed(2)}, priority=${targetPriority.toFixed(0)})`);
-            }
-        } else if (this.debugLog && now - this.lastDebugTime > 1000) {
-            console.log(`[AI] Aiming at enemy ${target.id} (dist=${distToTarget.toFixed(1)}, angle=${angleDiff.toFixed(2)}, priority=${targetPriority.toFixed(0)})`);
-            this.lastDebugTime = now;
-        }
-        
-        // Movement strategy based on threat level
-        if (targetPriority < -4000) {
-            // CRITICAL threat (enemy about to grab Gunther) - REVERSE toward them!
-            // If target is behind us (large angle), reversing brings us closer
-            if (Math.abs(angleDiff) > 1.5) {
-                GameInput.moveForward = -0.5;  // Reverse!
-                GameInput.moveSide = Math.sign(angleDiff);  // Turn while reversing
-            } else {
-                GameInput.moveForward = 0;  // Stop and turn
-                GameInput.moveSide = -Math.sign(angleDiff);  // Maximum turn rate
-            }
-        } else if (isPriorityTarget) {
-            // High priority - slow down significantly
-            GameInput.moveForward = Math.abs(angleDiff) > 1.0 ? -0.3 : 0.2;  // Reverse if target behind
-        } else {
-            // Normal enemies - move carefully
-            // Slow down if there are many enemies to clear them first
-            const enemyCount = enemies ? enemies.filter(e => 
-                Math.hypot(e.x - car.x, e.z - car.z) < this.SHOOT_RANGE
-            ).length : 0;
-            
-            if (enemyCount >= 3) {
-                GameInput.moveForward = 0.3;  // Slow down with many enemies
-            } else {
-                GameInput.moveForward = Math.abs(angleDiff) < 0.5 ? 0.6 : 0.4;
-            }
-        }
-        
-        return true;
-    },
-    
-    handleGuntherRescue(dt, state, local) {
-        const { gunther, car, enemies } = state;
-        const { inCar, isDriver, player } = local;
-        
-        if (!gunther) return false;
-        
-        // Handle rescue for wandering OR trapped Gunther
-        // (captured = shoot the enemy holding him, not rescue)
-        if (gunther.state !== 'wandering' && gunther.state !== 'trapped') return false;
-        
+        // Debug logging
         if (this.debugLog && performance.now() - this.lastDebugTime > 2000) {
-            const distToCar = car ? Math.hypot(gunther.x - car.x, gunther.z - car.z) : -1;
-            console.log(`[AI] Rescue: Gunther=${gunther.state}, dist=${distToCar.toFixed(1)}, inCar=${inCar}, enemies=${enemies?.length || 0}`);
+            const nearestEnemy = this.getNearestEnemyDist(enemies, car);
+            console.log(`[AI] State: inCar=${inCar}, gunther=${gunther?.state}, enemies=${enemies?.length || 0}, nearest=${nearestEnemy?.toFixed(0) || 'none'}`);
             this.lastDebugTime = performance.now();
         }
         
-        // CRITICAL: Check if area is COMPLETELY safe before considering exit
-        if (enemies && car) {
-            for (const e of enemies) {
-                const dist = Math.hypot(e.x - car.x, e.z - car.z);
-                if (dist < this.SAFE_EXIT_RANGE) {
-                    // NOT SAFE - stay in car, drive toward Gunther while shooting
-                    if (inCar && isDriver) {
-                        // Drive toward Gunther's position
-                        const angleToGunther = Math.atan2(gunther.x - car.x, gunther.z - car.z);
-                        const angleDiff = this.normalizeAngle(angleToGunther - local.carRotation);
-                        
-                        if (Math.abs(angleDiff) > 0.3) {
-                            GameInput.moveSide = -Math.sign(angleDiff) * 0.8;
-                        }
-                        GameInput.moveForward = 0.6;  // Slower, focused on positioning
-                    }
-                    return true;  // Handled - don't progress, focus on rescue positioning
-                }
-            }
-        }
-        
-        // Area is SAFE - all enemies far away
-        if (inCar && car) {
-            const distToGunther = Math.hypot(gunther.x - car.x, gunther.z - car.z);
-            
-            // Exit only if Gunther is close enough for quick grab
-            if (distToGunther < 10) {
-                GameInput.triggerAction('enterExit');
-                return true;
-            }
-            
-            // Drive toward Gunther
-            const angleToGunther = Math.atan2(gunther.x - car.x, gunther.z - car.z);
-            const angleDiff = this.normalizeAngle(angleToGunther - local.carRotation);
-            
-            if (this.debugLog && performance.now() - this.lastDebugTime > 2000) {
-                console.log(`[AI] Rescue: driving to Gunther, dist=${distToGunther.toFixed(0)}, angle=${angleDiff.toFixed(2)}`);
-                this.lastDebugTime = performance.now();
-            }
-            
-            // If Gunther is behind us (large angle), REVERSE toward him
-            if (Math.abs(angleDiff) > 2.0) {
-                GameInput.moveForward = -0.8;  // Reverse!
-                GameInput.moveSide = Math.sign(angleDiff) * 0.5;  // Turn while reversing
-            } else if (Math.abs(angleDiff) > 1.0) {
-                // Mostly behind - reverse slowly while turning hard
-                GameInput.moveForward = -0.4;
-                GameInput.moveSide = -Math.sign(angleDiff);
-            } else {
-                // Gunther is ahead - drive forward
-                GameInput.moveForward = 0.8;
-                if (Math.abs(angleDiff) > 0.2) {
-                    GameInput.moveSide = -Math.sign(angleDiff) * 0.7;
-                }
-            }
-            return true;
-        }
-        
-        // On foot - SPRINT to Gunther and grab
-        if (!inCar && player) {
-            const dist = Math.hypot(gunther.x - player.position.x, gunther.z - player.position.z);
-            
-            if (dist < 4) {
-                GameInput.triggerAction('holdHand');
-            }
-            
-            // Sprint toward Gunther
-            this.moveToward({ x: gunther.x, z: gunther.z }, player.position, local);
-            return true;
-        }
-        
-        return false;
-    },
-    
-    handleGuntherReturn(dt, state, local) {
-        const { gunther, car } = state;
-        const { inCar, player } = local;
-        
-        if (!gunther || gunther.state !== 'holding_hands') return false;
-        
-        // We have Gunther by the hand - get back to car!
-        if (!inCar && car && player) {
-            const distToCar = Math.hypot(car.x - player.position.x, car.z - player.position.z);
-            
-            if (distToCar < 5) {
-                GameInput.triggerAction('enterExit');
-                return true;
-            }
-            
-            // Sprint to car
-            this.moveToward({ x: car.x, z: car.z }, player.position, local);
-            return true;
-        }
-        
-        return false;
-    },
-    
-    handleProgress(dt, state, local) {
-        const { car, gunther } = state;
-        const { inCar, isDriver, carRotation, player } = local;
-        
-        // If on foot and Gunther is safe, get back in car!
-        if (!inCar && gunther && gunther.state === 'in_car' && car && player) {
-            const distToCar = Math.hypot(car.x - player.position.x, car.z - player.position.z);
-            
-            if (this.debugLog && performance.now() - this.lastDebugTime > 1000) {
-                console.log(`[AI] Return to car: dist=${distToCar.toFixed(1)}, player=(${player.position.x.toFixed(1)},${player.position.z.toFixed(1)}), car=(${car.x.toFixed(1)},${car.z.toFixed(1)})`);
-                this.lastDebugTime = performance.now();
-            }
-            
-            if (distToCar < 8) {  // Increased from 5 to 8
-                GameInput.triggerAction('enterExit');
-                console.log('[AI] Triggering enterExit to get back in car!');
-            } else {
-                this.moveToward({ x: car.x, z: car.z }, player.position, local);
-            }
+        // PRIORITY 1: If holding Gunther's hand, get to car
+        if (gunther?.state === 'holding_hands') {
+            this.returnToCar(car, player, inCar, playerRotation);
             return;
         }
         
-        // Drive toward goal (positive Z)
-        if (inCar && isDriver) {
-            // Aim roughly forward
-            const targetAngle = 0;
-            const angleDiff = this.normalizeAngle(targetAngle - carRotation);
-            
-            // Gentle steering toward goal
-            if (Math.abs(angleDiff) > 0.1) {
-                GameInput.moveSide = -Math.sign(angleDiff) * 0.5;
+        // PRIORITY 2: Combat decisions
+        const nearestEnemyDist = this.getNearestEnemyDist(enemies, inCar ? car : player);
+        const hasThreats = nearestEnemyDist !== null && nearestEnemyDist < this.THREAT_RANGE;
+        const isSafe = nearestEnemyDist === null || nearestEnemyDist > this.SAFE_RANGE;
+        
+        if (inCar) {
+            // In car - should we exit to fight?
+            if (hasThreats) {
+                console.log(`[AI] THREAT! Enemy at ${nearestEnemyDist.toFixed(0)}m - EXITING CAR`);
+                GameInput.triggerAction('enterExit');
+                this.run.carExits++;
+                return;
             }
             
-            // Full speed ahead
-            GameInput.moveForward = 1;
+            // Safe - drive toward goal
+            this.driveTowardGoal(carRotation, gunther, car);
+            
+        } else {
+            // On foot - SHOOT!
+            const shotFired = this.shootEnemies(enemies, player, playerRotation);
+            
+            // If no threats left, get back in car
+            if (isSafe && !shotFired) {
+                this.returnToCar(car, player, false, playerRotation);
+            }
+            
+            // Also try to rescue Gunther if he's close and wandering
+            if (gunther?.state === 'wandering' || gunther?.state === 'trapped') {
+                const distToGunther = Math.hypot(gunther.x - player.position.x, gunther.z - player.position.z);
+                if (distToGunther < this.GUNTHER_RESCUE_RANGE) {
+                    this.moveToward(gunther, player.position, playerRotation);
+                    if (distToGunther < 4) {
+                        GameInput.triggerAction('holdHand');
+                    }
+                }
+            }
         }
     },
     
-    moveToward(target, from, local) {
-        const dx = target.x - from.x;
-        const dz = target.z - from.z;
+    getNearestEnemyDist(enemies, ref) {
+        if (!enemies || !enemies.length || !ref) return null;
+        const pos = ref.position || ref;  // Handle both THREE.Object3D and {x,z}
+        const x = pos.x !== undefined ? pos.x : ref.x;
+        const z = pos.z !== undefined ? pos.z : ref.z;
+        return Math.min(...enemies.map(e => Math.hypot(e.x - x, e.z - z)));
+    },
+    
+    shootEnemies(enemies, player, playerRotation) {
+        if (!enemies || !enemies.length || !player) return false;
+        
+        const now = performance.now();
+        if (now - this.lastShootTime < this.SHOOT_COOLDOWN) return false;
+        
+        // Find best target
+        let bestEnemy = null;
+        let bestScore = -Infinity;
+        
+        for (const e of enemies) {
+            const dx = e.x - player.position.x;
+            const dz = e.z - player.position.z;
+            const dist = Math.hypot(dx, dz);
+            
+            if (dist > this.SHOOT_RANGE) continue;
+            
+            const angleToEnemy = Math.atan2(dx, dz);
+            const angleDiff = Math.abs(this.normalizeAngle(angleToEnemy - playerRotation));
+            
+            // Score: prefer close enemies we're already aiming at
+            const score = -dist - angleDiff * 20;
+            if (score > bestScore) {
+                bestScore = score;
+                bestEnemy = { enemy: e, dist, angleToEnemy, angleDiff };
+            }
+        }
+        
+        if (!bestEnemy) return false;
+        
+        const { enemy, dist, angleToEnemy, angleDiff } = bestEnemy;
+        
+        // Aim toward enemy
+        const aimDir = this.normalizeAngle(angleToEnemy - playerRotation);
+        GameInput.aimX = Math.sign(aimDir) * Math.min(Math.abs(aimDir) * 5, 0.1);
+        
+        // Shoot if aimed well enough
+        if (angleDiff < this.AIM_TOLERANCE) {
+            GameInput.triggerAction('shoot');
+            this.lastShootTime = now;
+            console.log(`[AI] SHOOTING enemy at dist=${dist.toFixed(0)}, angle=${angleDiff.toFixed(2)}`);
+            return true;
+        } else {
+            if (this.debugLog && now - this.lastDebugTime > 500) {
+                console.log(`[AI] Aiming... angleDiff=${angleDiff.toFixed(2)}`);
+            }
+        }
+        
+        return false;
+    },
+    
+    driveTowardGoal(carRotation, gunther, car) {
+        // Simple: drive forward (positive Z direction)
+        const targetAngle = 0;
+        const angleDiff = this.normalizeAngle(targetAngle - carRotation);
+        
+        // Steer toward goal
+        if (Math.abs(angleDiff) > 0.1) {
+            GameInput.moveSide = -Math.sign(angleDiff) * 0.6;
+        }
+        
+        // Full speed
+        GameInput.moveForward = 1;
+    },
+    
+    returnToCar(car, player, inCar, rotation) {
+        if (!car || !player || inCar) return;
+        
+        const dx = car.x - player.position.x;
+        const dz = car.z - player.position.z;
         const dist = Math.hypot(dx, dz);
         
-        if (dist > 0.5) {
-            // Move in direction of target
-            const angle = Math.atan2(dx, dz);
-            // Use playerRotation when on foot, carRotation when in car
-            const playerAngle = local.inCar ? local.carRotation : (local.playerRotation || 0);
-            const relAngle = this.normalizeAngle(angle - playerAngle);
-            
-            // Forward/back based on whether target is in front
-            GameInput.moveForward = Math.cos(relAngle) > 0 ? 1 : -0.5;
-            // Strafe based on left/right
-            GameInput.moveSide = Math.sin(relAngle) > 0 ? 0.5 : -0.5;
+        if (dist < 6) {
+            GameInput.triggerAction('enterExit');
+            console.log('[AI] Getting back in car');
+        } else {
+            this.moveToward({ x: car.x, z: car.z }, player.position, rotation);
         }
+    },
+    
+    moveToward(target, from, rotation) {
+        const dx = target.x - from.x;
+        const dz = target.z - from.z;
+        const angle = Math.atan2(dx, dz);
+        const relAngle = this.normalizeAngle(angle - rotation);
+        
+        // Move toward target
+        GameInput.moveForward = Math.cos(relAngle) > 0 ? 1 : -0.3;
+        GameInput.moveSide = Math.sin(relAngle) > 0.2 ? 0.5 : (Math.sin(relAngle) < -0.2 ? -0.5 : 0);
     },
     
     normalizeAngle(angle) {
         while (angle > Math.PI) angle -= Math.PI * 2;
         while (angle < -Math.PI) angle += Math.PI * 2;
         return angle;
-    },
-    
-    onGameEnd(result, details) {
-        if (this.enabled) {
-            console.log(`[Autoplay] Game ended: ${result}`, details);
-        }
     }
 };
 
-window.AutoplayController = AutoplayController;
+// Auto-init
+AutoplayController.init();

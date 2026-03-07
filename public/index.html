@@ -1432,11 +1432,10 @@
                 }
             }
             
-            // Shooting (use GameInput)
-            if (GameInput.consumeAction('shoot') && isInCar && isDriver) {
-                const pos = car.position;
-                const dir = new THREE.Vector3(Math.sin(carRotation), 0, Math.cos(carRotation));
-                socket.emit('shoot', { x: pos.x, z: pos.z, dirX: dir.x, dirZ: dir.z });
+            // Shooting (use GameInput) - ON FOOT ONLY!
+            if (GameInput.consumeAction('shoot') && !isInCar) {
+                const dir = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
+                socket.emit('shoot', { x: player.position.x, z: player.position.z, dirX: dir.x, dirZ: dir.z });
             }
             
             // Reset input deltas

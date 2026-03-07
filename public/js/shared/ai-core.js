@@ -12,7 +12,7 @@ const AI_CONFIG = {
     CAR_ENTER_RANGE: 5,
     
     // Human-like constraints (in ticks, 1 tick = 1 simulation frame)
-    REACTION_TICKS: 18,          // ticks to notice state changes (~0.3s at 60fps)
+    REACTION_TICKS: 54,          // ticks to notice state changes (~0.9s at 60fps)
     AIM_TICKS: 6,                // ticks to acquire target before first shot (~0.1s at 60fps)
 };
 

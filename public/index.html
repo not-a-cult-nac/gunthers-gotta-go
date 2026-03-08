@@ -751,11 +751,9 @@
                 touchMoveX = dx / maxDist;
                 touchMoveY = dy / maxDist;
                 
-                // Set virtual keys
-                keys['KeyW'] = touchMoveY < -0.3;
-                keys['KeyS'] = touchMoveY > 0.3;
-                keys['KeyA'] = touchMoveX < -0.3;
-                keys['KeyD'] = touchMoveX > 0.3;
+                // Set GameInput (new system) - direct analog values
+                GameInput.moveForward = -touchMoveY;  // Negative because up = forward
+                GameInput.moveSide = touchMoveX;
             }, { passive: false });
             
             const resetJoystick = () => {
@@ -764,10 +762,9 @@
                 joystickKnob.style.top = '50%';
                 touchMoveX = 0;
                 touchMoveY = 0;
-                keys['KeyW'] = false;
-                keys['KeyS'] = false;
-                keys['KeyA'] = false;
-                keys['KeyD'] = false;
+                // Reset GameInput movement
+                GameInput.moveForward = 0;
+                GameInput.moveSide = 0;
             };
             
             joystickZone.addEventListener('touchend', resetJoystick);
@@ -803,30 +800,20 @@
             // Action buttons
             btnShoot.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                if (socket && gameStarted) {
-                    const camDir = new THREE.Vector3(0, 0, -1);
-                    camDir.applyQuaternion(camera.quaternion);
-                    const pos = isInCar ? car.position : player.position;
-                    socket.emit('shoot', { x: pos.x, z: pos.z, dirX: camDir.x, dirZ: camDir.z });
+                if (gameStarted && !isInCar) {
+                    GameInput.triggerAction('shoot');
                     SFX.shoot();
                 }
             }, { passive: false });
             
             btnAction.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                keys['KeyE'] = true;
-                setTimeout(() => { keys['KeyE'] = false; }, 100);
+                GameInput.triggerAction('enterExit');
             }, { passive: false });
             
             btnHold.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                if (socket) {
-                    if (guntherHoldingHands) {
-                        socket.emit('releaseHand');
-                    } else {
-                        socket.emit('holdHand');
-                    }
-                }
+                GameInput.triggerAction('holdHand');  // Game logic handles toggle
             }, { passive: false });
             
             // Update hold button text based on state

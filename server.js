@@ -2,10 +2,23 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
+
+// Generate build ID at server start
+const BUILD_ID = `v${new Date().toISOString().slice(5,16).replace(/[-:T]/g, '')}`; // e.g. v03081634
+console.log(`[BUILD] ${BUILD_ID}`);
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+
+// Serve index.html with build ID injected
+app.get('/', (req, res) => {
+    const htmlPath = path.join(__dirname, 'public', 'index.html');
+    let html = fs.readFileSync(htmlPath, 'utf8');
+    html = html.replace(/__BUILD_ID__/g, BUILD_ID);
+    res.type('html').send(html);
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -79,7 +92,7 @@ class GameRoom {
         
         // Debug config (can be adjusted via debug panel)
         this.config = {
-            escapeRate: 0.05,       // Probability per second of random escape (~every 20 seconds)
+            escapeRate: 0.05,       // Probability per second of random escape
             lureRange: 12,          // Distance at which enemies lure Gunther out
             enemySpeed: 3,          // Base enemy movement speed
             guntherSpeed: 3.5       // Gunther wander speed
@@ -113,6 +126,8 @@ class GameRoom {
             id: this.enemyIdCounter++,
             x: side * (20 + Math.random() * 25),
             z: minZ + Math.random() * (maxZ - minZ),
+            vx: 0,  // Velocity components for AI prediction
+            vz: 0,
             health: 2,
             hasGunther: false,
             speed: baseSpeed + Math.random() * (baseSpeed * 0.5)  // Base + up to 50% variance
@@ -352,13 +367,20 @@ class GameRoom {
             const distToCar = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
             const inRange = distToCar < ENEMY_DETECTION_RANGE;
             
+            // Reset velocity each frame (will be set below if moving)
+            enemy.vx = 0;
+            enemy.vz = 0;
+            
             if ((guntherVulnerable || guntherHeld) && !enemy.hasGunther && inRange) {
                 const dx = this.gunther.x - enemy.x;
                 const dz = this.gunther.z - enemy.z;
                 const dist = Math.hypot(dx, dz);
                 if (dist > 0) {
-                    enemy.x += (dx / dist) * enemy.speed * delta;
-                    enemy.z += (dz / dist) * enemy.speed * delta;
+                    // Track velocity for AI prediction
+                    enemy.vx = (dx / dist) * enemy.speed;
+                    enemy.vz = (dz / dist) * enemy.speed;
+                    enemy.x += enemy.vx * delta;
+                    enemy.z += enemy.vz * delta;
                 }
                 
                 // Can only capture if NOT holding hands
@@ -378,8 +400,10 @@ class GameRoom {
                 const dz = this.car.z - enemy.z;
                 const dist = Math.hypot(dx, dz);
                 if (dist > 0 && dist < ENEMY_DETECTION_RANGE) {
-                    enemy.x += (dx / dist) * enemy.speed * 0.3 * delta;
-                    enemy.z += (dz / dist) * enemy.speed * 0.3 * delta;
+                    enemy.vx = (dx / dist) * enemy.speed * 0.3;
+                    enemy.vz = (dz / dist) * enemy.speed * 0.3;
+                    enemy.x += enemy.vx * delta;
+                    enemy.z += enemy.vz * delta;
                 }
             }
         }
@@ -392,9 +416,13 @@ class GameRoom {
         // Remove enemies too far behind
         this.enemies = this.enemies.filter(e => e.z > this.car.z - 80 || e.hasGunther);
         
-        // Win check
+        // Win check - use 15m threshold for margin
         const goalDist = Math.hypot(this.car.x, this.car.z - GOAL_Z);
-        if (goalDist < 12 && this.gunther.state === 'in_car') {
+        if (goalDist < 20) {
+            console.log(`[WIN CHECK] goalDist=${goalDist.toFixed(2)}, gunther=${this.gunther.state}, gameState=${this.gameState}`);
+        }
+        if (goalDist <= 12 && this.gunther.state === 'in_car') {
+            console.log(`[WIN] Game won! goalDist=${goalDist.toFixed(2)}`);
             this.gameState = 'won';
         }
     }
@@ -428,6 +456,11 @@ class GameRoom {
                     this.lastQuote = wasTrapped ? "Ach! You freed me from ze fun snappy thing!" : 
                                      wasHolding ? "NEIN! Not ze boring car again!" :
                                      "Nein! Ze adventure vas just beginning!";
+                    // Check win immediately when Gunther enters car
+                    const goalDist = Math.hypot(this.car.x, this.car.z - GOAL_Z);
+                    if (goalDist <= 12) {
+                        this.gameState = 'won';
+                    }
                     return true;
                 }
             }
@@ -514,18 +547,76 @@ class GameRoom {
     }
     
     getState() {
+        // Add derived fields to enemies for AI
+        const enrichedEnemies = this.enemies.map(e => {
+            const distToCar = Math.hypot(e.x - this.car.x, e.z - this.car.z);
+            const distToGunther = Math.hypot(e.x - this.gunther.x, e.z - this.gunther.z);
+            const angleFromCar = Math.atan2(e.x - this.car.x, e.z - this.car.z);
+            return {
+                ...e,
+                distToCar,
+                distToGunther,
+                angleFromCar
+            };
+        });
+        
+        // Find nearest enemy to Gunther
+        let nearestEnemyToGunther = null;
+        let nearestDist = Infinity;
+        for (const e of enrichedEnemies) {
+            if (e.distToGunther < nearestDist && !e.hasGunther) {
+                nearestDist = e.distToGunther;
+                nearestEnemyToGunther = e.id;
+            }
+        }
+        
+        // Spatial calculations for AI
+        const distCarToGunther = Math.hypot(this.gunther.x - this.car.x, this.gunther.z - this.car.z);
+        const angleCarToGunther = Math.atan2(this.gunther.x - this.car.x, this.gunther.z - this.car.z);
+        const distCarToGoal = Math.hypot(this.car.x - 0, this.car.z - GOAL_Z);
+        const angleCarToGoal = Math.atan2(0 - this.car.x, GOAL_Z - this.car.z);
+        
+        // Angle difference (how far car needs to turn)
+        const normalizeAngle = (a) => ((a + Math.PI) % (2 * Math.PI)) - Math.PI;
+        const turnToGunther = normalizeAngle(angleCarToGunther - this.car.rotation);
+        const turnToGoal = normalizeAngle(angleCarToGoal - this.car.rotation);
+        
         return {
-            car: this.car,
-            gunther: this.gunther,
-            enemies: this.enemies,
+            car: {
+                ...this.car,
+                // Spatial awareness
+                distToGunther: distCarToGunther,
+                angleToGunther: angleCarToGunther,
+                turnToGunther,  // How much to turn to face Gunther
+                distToGoal: distCarToGoal,
+                angleToGoal: angleCarToGoal,
+                turnToGoal,     // How much to turn to face goal
+            },
+            gunther: {
+                ...this.gunther,
+                distToCar: distCarToGunther,
+                angleToCar: normalizeAngle(angleCarToGunther + Math.PI),  // Opposite direction
+            },
+            enemies: enrichedEnemies,
+            hazards: HAZARDS,
+            nearestEnemyToGunther,
+            nearestEnemyDist: nearestDist,
+            guntherInDanger: nearestDist < 15 && (this.gunther.state === 'wandering' || this.gunther.state === 'trapped'),
             gameState: this.gameState,
-            players: Array.from(this.players.entries()).map(([id, p]) => ({
-                id, name: p.name, inCar: p.inCar, x: p.x, z: p.z, color: p.color, isDriver: p.isDriver, seatIndex: p.seatIndex
-            })),
+            players: Array.from(this.players.entries()).map(([id, p]) => {
+                const distToGunther = Math.hypot(p.x - this.gunther.x, p.z - this.gunther.z);
+                const distToCar = Math.hypot(p.x - this.car.x, p.z - this.car.z);
+                return {
+                    id, name: p.name, inCar: p.inCar, x: p.x, z: p.z, color: p.color, 
+                    isDriver: p.isDriver, seatIndex: p.seatIndex,
+                    distToGunther, distToCar
+                };
+            }),
             driver: this.driver,
             lastQuote: this.lastQuote,
             loseReason: this.loseReason,
-            goalZ: GOAL_Z
+            goalZ: GOAL_Z,
+            startZ: START_Z
         };
     }
 }
@@ -687,7 +778,12 @@ io.on('connection', (socket) => {
                     currentRoom.gunther.visible = false;
                     currentRoom.gunther.holderId = null;
                     currentRoom.gunther.strain = 0;
-                    currentRoom.lastQuote = "NEIN! You tricked me into ze boring car!";
+                    // Check win immediately when Gunther enters car
+                    const goalDist = Math.hypot(currentRoom.car.x, currentRoom.car.z - GOAL_Z);
+                    currentRoom.lastQuote = `DEBUG: car.z=${currentRoom.car.z.toFixed(0)}, goalDist=${goalDist.toFixed(0)}`;
+                    if (goalDist <= 12) {
+                        currentRoom.gameState = 'won';
+                    }
                 }
             }
         }
@@ -708,6 +804,12 @@ io.on('connection', (socket) => {
     socket.on('shoot', (data) => {
         if (!currentRoom) return;
         const result = currentRoom.shoot(socket.id, data.x, data.z, data.dirX, data.dirZ);
+        // Emit result to shooter for AI feedback
+        socket.emit('shootResult', { 
+            hit: !!result, 
+            enemyId: result?.id || null,
+            killed: result?.killed || false
+        });
         if (result) io.to(currentRoom.code).emit('enemyHit', result);
     });
     
@@ -743,3 +845,4 @@ setInterval(() => {
 
 const PORT = 8080;
 server.listen(PORT, () => console.log(`GGG server running on port ${PORT}`));
+

@@ -1,17 +1,2 @@
-{"ts":"2026-03-06T08:10:04.943Z","level":"error","msg":"Container start failed","data":{"name":"ggg","error":"Neither \"docker compose\" (v2) nor \"docker-compose\" (v1) is available."}}
-{"ts":"2026-03-06T08:11:29.191Z","level":"error","msg":"Container start failed","data":{"name":"ggg","error":"Docker compose failed (exit 130)"}}
-{"ts":"2026-03-06T08:12:42.793Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-06T08:15:04.998Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-06T08:15:25.427Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-06T08:16:24.227Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-06T15:55:36.349Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-06T15:58:28.922Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-06T17:52:48.268Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-06T20:22:41.860Z","level":"info","msg":"Container stopped","data":{"name":"ggg"}}
-{"ts":"2026-03-06T20:22:51.654Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-07T00:23:17.096Z","level":"info","msg":"Container stopped","data":{"name":"ggg"}}
-{"ts":"2026-03-07T00:23:26.891Z","level":"info","msg":"Container cleaned up","data":{"name":"ggg"}}
-{"ts":"2026-03-07T00:23:26.892Z","level":"info","msg":"Removed generated compose dir","data":{"dir":"/home/user/.jump.sh/ggg"}}
-{"ts":"2026-03-07T00:23:36.374Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
-{"ts":"2026-03-07T00:23:58.567Z","level":"info","msg":"Container stopped","data":{"name":"ggg"}}
-{"ts":"2026-03-07T00:24:00.579Z","level":"info","msg":"Container started","data":{"name":"ggg"}}
+GGG server running on port 8080
+Player connected: MlAGmhjYCCdGBgl5AAAB

@@ -76,52 +76,60 @@
             background: #fff; border: none; color: #333; cursor: pointer;
         }
         
-        /* Debug Panel */
-        #debug-panel {
+        /* Debug Panel - floating button that expands */
+        #debug-btn {
             position: absolute;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: min(400px, 90vw);
-            background: rgba(0, 0, 0, 0.9);
+            top: 10px;
+            right: 60px;
+            width: 36px;
+            height: 36px;
+            background: rgba(255, 107, 53, 0.8);
             border: 2px solid #ff6b35;
-            border-top: none;
-            border-radius: 0 0 10px 10px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
             z-index: 200;
+            display: none; /* Hidden until game starts */
+        }
+        #debug-btn:hover {
+            background: #ff6b35;
+        }
+        #debug-panel {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: min(400px, 90vw);
+            max-height: 80vh;
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid #ff6b35;
+            border-radius: 10px;
+            z-index: 300;
             font-size: 14px;
             color: #fff;
-            overflow: hidden;
-        }
-        #debug-panel .debug-content {
-            max-height: 0;
-            overflow: hidden;
-            padding: 0 15px;
-            transition: max-height 0.3s ease, padding 0.3s ease;
-        }
-        #debug-panel.open .debug-content {
-            max-height: 400px;
+            overflow-y: auto;
             padding: 15px;
         }
-        #debug-toggle {
+        #debug-panel.open {
             display: block;
-            width: 100%;
-            padding: 8px;
-            background: #ff6b35;
-            border: none;
-            color: #fff;
-            font-size: 14px;
-            font-family: inherit;
-            cursor: pointer;
-            text-align: center;
-        }
-        #debug-toggle:hover {
-            background: #ff8c5a;
         }
         #debug-panel h3 {
             color: #ff6b35;
             margin-bottom: 15px;
             text-align: center;
             font-size: 16px;
+        }
+        #debug-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #ff6b35;
+            font-size: 24px;
+            cursor: pointer;
         }
         .debug-row {
             display: flex;
@@ -152,13 +160,17 @@
             text-align: center;
             margin-top: 10px;
         }
-        /* Hide on mobile by default, show toggle */
+        /* Mobile adjustments */
         @media (max-width: 600px) {
             #debug-panel {
                 width: 95vw;
+                max-height: 70vh;
             }
             .debug-row input[type="range"] {
                 width: 80px;
+            }
+            .debug-row label {
+                font-size: 12px;
             }
         }
     </style>
@@ -203,6 +215,7 @@
     </div>
     
     <div id="autoplay-badge" style="position: absolute; top: 10px; right: 10px; background: #6b35ff; color: white; padding: 5px 10px; border-radius: 5px; display: none; font-size: 14px; z-index: 200;">🤖 AUTOPLAY</div>
+    <button id="debug-btn">🔧</button>
     <div id="ui">
         <div>TIME: <span id="elapsed-time">0:00</span></div>
         <div>GUNTHER: <span id="gunther-status">IN CAR</span></div>
@@ -216,9 +229,8 @@
     <div id="crosshair"></div>
     
     <div id="debug-panel">
-        <button id="debug-toggle">🔧 Debug</button>
-        <div class="debug-content">
-            <h3>DEBUG PANEL</h3>
+        <button id="debug-close">✕</button>
+        <h3>🔧 DEBUG PANEL</h3>
             <div class="debug-row">
                 <label>Seed</label>
                 <input type="number" id="debug-seed" style="width: 80px; padding: 2px 5px;" value="" placeholder="random">
@@ -254,8 +266,7 @@
                 <input type="range" id="debug-gunther-speed" min="1" max="10" value="3.5" step="0.5">
                 <span class="value" id="debug-gunther-speed-val">3.5</span>
             </div>
-            <p class="hint">Press ~ or tap toggle • Changes sync in real-time</p>
-        </div>
+            <p class="hint">Press ~ to toggle • Changes sync in real-time</p>
     </div>
     
     <div id="instructions">
@@ -567,19 +578,33 @@
         
         function setupDebugPanel() {
             const panel = document.getElementById('debug-panel');
-            const toggle = document.getElementById('debug-toggle');
+            const openBtn = document.getElementById('debug-btn');
+            const closeBtn = document.getElementById('debug-close');
             
-            function togglePanel() {
-                debugPanelOpen = !debugPanelOpen;
-                panel.classList.toggle('open', debugPanelOpen);
-                toggle.textContent = debugPanelOpen ? '🔧 Close' : '🔧 Debug';
+            function openPanel() {
+                debugPanelOpen = true;
+                panel.classList.add('open');
             }
             
-            // Toggle button (works on mobile)
-            toggle.addEventListener('click', togglePanel);
-            toggle.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                togglePanel();
+            function closePanel() {
+                debugPanelOpen = false;
+                panel.classList.remove('open');
+            }
+            
+            function togglePanel() {
+                if (debugPanelOpen) closePanel();
+                else openPanel();
+            }
+            
+            // Open button
+            openBtn.addEventListener('click', openPanel);
+            
+            // Close button
+            closeBtn.addEventListener('click', closePanel);
+            
+            // Click outside to close
+            panel.addEventListener('click', (e) => {
+                if (e.target === panel) closePanel();
             });
             
             // Toggle with ~ key (desktop)
@@ -750,6 +775,7 @@
         socket.on('gameStarted', () => {
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('ui').style.display = 'block';
+            document.getElementById('debug-btn').style.display = 'block';
             document.getElementById('crosshair').style.display = isMobile ? 'none' : 'block';
             document.getElementById('instructions').style.display = isMobile ? 'none' : 'block';
             

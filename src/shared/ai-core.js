@@ -332,7 +332,7 @@ class AIController {
         }
         
         // Execute first action in plan
-        if (this.currentPlan && this.currentPlan.length > 0) {
+        while (this.currentPlan && this.currentPlan.length > 0) {
             const actionName = this.currentPlan[0];
             const action = ACTIONS[actionName];
             
@@ -356,8 +356,26 @@ class AIController {
                 
                 return inputs;
             } else {
-                // Preconditions no longer met, replan next frame
-                this.currentPlan = null;
+                // Preconditions no longer met - skip this action and try next
+                this.currentPlan.shift();
+                // If plan is now empty, replan immediately
+                if (this.currentPlan.length === 0) {
+                    this.currentPlan = this.createPlan(worldState);
+                    this.lastPlanTime = time;
+                }
+            }
+        }
+        
+        // No plan - try to create one
+        this.currentPlan = this.createPlan(worldState);
+        this.lastPlanTime = time;
+        
+        // Try to execute the new plan
+        if (this.currentPlan && this.currentPlan.length > 0) {
+            const actionName = this.currentPlan[0];
+            const action = ACTIONS[actionName];
+            if (action && satisfies(worldState, action.preconditions)) {
+                return action.execute(worldState);
             }
         }
         
@@ -403,7 +421,15 @@ class AIController {
 
 // Export for both Node.js and browser
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { AIController, AI_CONFIG };
+    module.exports = { 
+        AIController, 
+        AI_CONFIG, 
+        createWorldState, 
+        plan, 
+        ACTIONS, 
+        satisfies, 
+        getApplicableActions 
+    };
 }
 
 if (typeof window !== 'undefined') {

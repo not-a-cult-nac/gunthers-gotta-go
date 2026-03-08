@@ -171,6 +171,7 @@
     
     <div id="autoplay-badge" style="position: absolute; top: 10px; right: 10px; background: #6b35ff; color: white; padding: 5px 10px; border-radius: 5px; display: none; font-size: 14px; z-index: 200;">🤖 AUTOPLAY</div>
     <div id="ui">
+        <div>TIME: <span id="elapsed-time">0:00</span></div>
         <div>GUNTHER: <span id="gunther-status">IN CAR</span></div>
         <div>ENEMIES: <span id="enemy-count">0</span></div>
         <div>DISTANCE: <span id="distance">500</span>m</div>
@@ -183,6 +184,21 @@
     
     <div id="debug-panel">
         <h3>🔧 DEBUG PANEL (~)</h3>
+        <div class="debug-row">
+            <label>Seed</label>
+            <input type="number" id="debug-seed" style="width: 80px; padding: 2px 5px;" value="" placeholder="random">
+            <button id="debug-seed-apply" style="padding: 2px 8px; cursor: pointer;">Apply</button>
+        </div>
+        <div class="debug-row">
+            <label>Enemy Spawn Rate</label>
+            <input type="range" id="debug-spawn-rate" min="1" max="100" value="8">
+            <span class="value" id="debug-spawn-rate-val">0.008</span>
+        </div>
+        <div class="debug-row">
+            <label>Max Enemies</label>
+            <input type="range" id="debug-max-enemies" min="1" max="30" value="8">
+            <span class="value" id="debug-max-enemies-val">8</span>
+        </div>
         <div class="debug-row">
             <label>Gunther Escape Rate</label>
             <input type="range" id="debug-escape-rate" min="0" max="500" value="50">
@@ -502,11 +518,15 @@
         
         // Debug panel state
         let debugPanelOpen = false;
+        let gameStartTime = null;
         const debugConfig = {
             escapeRate: 0.15,       // Higher default - Gunther gets bored often
             lureRange: 12,
             enemySpeed: 3,
-            guntherSpeed: 3.5
+            guntherSpeed: 3.5,
+            spawnRate: 0.008,
+            maxEnemies: 8,
+            seed: null
         };
         
         function setupDebugPanel() {
@@ -555,6 +575,33 @@
                 debugConfig.guntherSpeed = parseFloat(guntherSlider.value);
                 guntherVal.textContent = debugConfig.guntherSpeed.toFixed(1);
                 sendDebugConfig();
+            });
+            
+            // Spawn rate slider
+            const spawnSlider = document.getElementById('debug-spawn-rate');
+            const spawnVal = document.getElementById('debug-spawn-rate-val');
+            spawnSlider.addEventListener('input', () => {
+                debugConfig.spawnRate = spawnSlider.value / 1000;
+                spawnVal.textContent = debugConfig.spawnRate.toFixed(3);
+                sendDebugConfig();
+            });
+            
+            // Max enemies slider
+            const maxEnemiesSlider = document.getElementById('debug-max-enemies');
+            const maxEnemiesVal = document.getElementById('debug-max-enemies-val');
+            maxEnemiesSlider.addEventListener('input', () => {
+                debugConfig.maxEnemies = parseInt(maxEnemiesSlider.value);
+                maxEnemiesVal.textContent = debugConfig.maxEnemies;
+                sendDebugConfig();
+            });
+            
+            // Seed input and apply button
+            const seedInput = document.getElementById('debug-seed');
+            const seedApply = document.getElementById('debug-seed-apply');
+            seedApply.addEventListener('click', () => {
+                const val = seedInput.value.trim();
+                debugConfig.seed = val ? parseInt(val) : null;
+                socket.emit('restartWithSeed', debugConfig.seed);
             });
         }
         
@@ -665,6 +712,7 @@
             }
             
             gameStarted = true;
+            gameStartTime = Date.now();  // Start elapsed timer
             window.gameEnded = false;  // Reset for new game
             init();
         });
@@ -1356,6 +1404,14 @@
             // UI
             document.getElementById('enemy-count').textContent = state.enemies.length;
             document.getElementById('player-count').textContent = state.players.length;
+            
+            // Elapsed timer
+            if (gameStartTime && state.gameState === 'playing') {
+                const elapsed = (Date.now() - gameStartTime) / 1000;
+                const mins = Math.floor(elapsed / 60);
+                const secs = Math.floor(elapsed % 60);
+                document.getElementById('elapsed-time').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
             
             const goalDist = Math.hypot(state.car.x, state.car.z - GOAL_Z);
             document.getElementById('distance').textContent = Math.round(goalDist);

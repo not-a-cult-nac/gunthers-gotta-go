@@ -95,8 +95,11 @@ class GameRoom {
             escapeRate: 0.05,       // Probability per second of random escape
             lureRange: 12,          // Distance at which enemies lure Gunther out
             enemySpeed: 3,          // Base enemy movement speed
-            guntherSpeed: 3.5       // Gunther wander speed
+            guntherSpeed: 3.5,      // Gunther wander speed
+            spawnRate: 0.008,       // Chance per frame to spawn enemy
+            maxEnemies: 8           // Max simultaneous enemies
         };
+        this.seed = null;
     }
     
     updateConfig(newConfig) {
@@ -104,6 +107,8 @@ class GameRoom {
         if (newConfig.lureRange !== undefined) this.config.lureRange = newConfig.lureRange;
         if (newConfig.enemySpeed !== undefined) this.config.enemySpeed = newConfig.enemySpeed;
         if (newConfig.guntherSpeed !== undefined) this.config.guntherSpeed = newConfig.guntherSpeed;
+        if (newConfig.spawnRate !== undefined) this.config.spawnRate = newConfig.spawnRate;
+        if (newConfig.maxEnemies !== undefined) this.config.maxEnemies = newConfig.maxEnemies;
         console.log('Config updated:', this.config);
     }
     
@@ -113,6 +118,31 @@ class GameRoom {
         for (let i = 0; i < 5; i++) {
             this.spawnEnemy();
         }
+    }
+    
+    restart() {
+        // Reset game state
+        this.car = { x: 0, z: START_Z, rotation: 0 };
+        this.gunther = { x: 0, z: START_Z, state: 'in_car', visible: false, captorId: null, trapPos: null, holderId: null, strain: 0 };
+        this.enemies = [];
+        this.gameState = 'playing';
+        this.lastUpdate = Date.now();
+        this.loseReason = '';
+        this.lastQuote = '';
+        
+        // Reset player positions
+        for (const [id, player] of this.players) {
+            player.x = 0;
+            player.z = START_Z;
+            player.inCar = true;
+        }
+        
+        // Spawn initial enemies
+        for (let i = 0; i < 5; i++) {
+            this.spawnEnemy();
+        }
+        
+        console.log(`Room ${this.code} restarted (seed: ${this.seed})`);
     }
     
     spawnEnemy() {
@@ -409,7 +439,7 @@ class GameRoom {
         }
         
         // Spawn enemies as car progresses
-        if (Math.random() < 0.008 && this.enemies.length < 8) {
+        if (Math.random() < this.config.spawnRate && this.enemies.length < this.config.maxEnemies) {
             this.spawnEnemy();
         }
         
@@ -818,6 +848,14 @@ io.on('connection', (socket) => {
         currentRoom.updateConfig(config);
         // Broadcast config change to all players in room
         io.to(currentRoom.code).emit('configUpdated', currentRoom.config);
+    });
+    
+    socket.on('restartWithSeed', (seed) => {
+        if (!currentRoom) return;
+        console.log(`Restarting room ${currentRoom.code} with seed: ${seed}`);
+        currentRoom.seed = seed;
+        currentRoom.restart();
+        io.to(currentRoom.code).emit('gameRestarted', { seed });
     });
     
     socket.on('disconnect', () => {

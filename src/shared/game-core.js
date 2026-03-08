@@ -39,7 +39,9 @@ const DEFAULT_CONFIG = {
     escapeRate: 0.05,
     lureRange: 12,
     enemySpeed: 3,
-    guntherSpeed: 3.5
+    guntherSpeed: 3.5,
+    spawnRate: 0.008,    // Chance per frame to spawn enemy
+    maxEnemies: 8        // Max simultaneous enemies
 };
 
 // Pure game state - no side effects
@@ -105,7 +107,7 @@ function updateGame(state, delta, inputs, random) {
     updateEnemies(newState, delta);
     
     // Spawn more enemies
-    if (random() < 0.008 && newState.enemies.length < 8) {
+    if (random() < newState.config.spawnRate && newState.enemies.length < newState.config.maxEnemies) {
         newState.enemies.push(spawnEnemy(newState, random));
     }
     

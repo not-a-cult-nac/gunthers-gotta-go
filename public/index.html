@@ -303,6 +303,146 @@
     <script>
         const socket = io();
         
+        // ===== SOUND EFFECTS SYSTEM =====
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioCtx;
+        }
+        
+        // Synthesized sound effects
+        const SFX = {
+            shoot: () => {
+                const ctx = initAudio();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(200, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.1);
+            },
+            
+            hit: () => {
+                const ctx = initAudio();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'square';
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(300, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.15);
+            },
+            
+            guntherEscape: () => {
+                const ctx = initAudio();
+                // Descending "uh oh" sound
+                [400, 300].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.15);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.12);
+                    osc.start(ctx.currentTime + i * 0.15);
+                    osc.stop(ctx.currentTime + i * 0.15 + 0.12);
+                });
+            },
+            
+            guntherRescue: () => {
+                const ctx = initAudio();
+                // Ascending happy sound
+                [300, 400, 500].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.1 + 0.1);
+                    osc.start(ctx.currentTime + i * 0.1);
+                    osc.stop(ctx.currentTime + i * 0.1 + 0.1);
+                });
+            },
+            
+            enemyDeath: () => {
+                const ctx = initAudio();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(400, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.3);
+            },
+            
+            win: () => {
+                const ctx = initAudio();
+                // Victory fanfare
+                [523, 659, 784, 1047].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.15);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.3);
+                    osc.start(ctx.currentTime + i * 0.15);
+                    osc.stop(ctx.currentTime + i * 0.15 + 0.3);
+                });
+            },
+            
+            lose: () => {
+                const ctx = initAudio();
+                // Sad trombone
+                [300, 280, 260, 200].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.3);
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.3);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.3 + 0.25);
+                    osc.start(ctx.currentTime + i * 0.3);
+                    osc.stop(ctx.currentTime + i * 0.3 + 0.25);
+                });
+            },
+            
+            enterCar: () => {
+                const ctx = initAudio();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(150, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.1);
+            }
+        };
+        // ===== END SOUND EFFECTS =====
+        
         let scene, camera, renderer;
         let car, player, gunther, goal;
         let enemyMeshes = new Map();
@@ -325,6 +465,7 @@
         };
         let isInCar = true;
         let guntherHoldingHands = false;
+        let lastGuntherState = 'in_car';
         let gameStarted = false;
         let playerId = null;
         let serverState = null;
@@ -575,6 +716,7 @@
         });
         
         socket.on('enemyHit', (data) => {
+            SFX.hit();
             const mesh = enemyMeshes.get(data.id);
             if (mesh) {
                 mesh.children.forEach(c => {
@@ -686,6 +828,7 @@
                     camDir.applyQuaternion(camera.quaternion);
                     const pos = isInCar ? car.position : player.position;
                     socket.emit('shoot', { x: pos.x, z: pos.z, dirX: camDir.x, dirZ: camDir.z });
+                    SFX.shoot();
                 }
             }, { passive: false });
             
@@ -1160,7 +1303,17 @@
                     marker.rotation.y += 0.03;
                 }
                 
-                guntherHoldingHands = state.gunther.state === 'holding_hands';
+                // Play sounds on Gunther state changes
+                const newState = state.gunther.state;
+                if (newState !== lastGuntherState) {
+                    if (newState === 'in_car' && (lastGuntherState === 'wandering' || lastGuntherState === 'holding_hands')) {
+                        SFX.guntherRescue(); // Gunther got back in car!
+                    } else if ((newState === 'wandering' || newState === 'captured' || newState === 'trapped') && lastGuntherState === 'in_car') {
+                        SFX.guntherEscape(); // Gunther escaped!
+                    }
+                    lastGuntherState = newState;
+                }
+                guntherHoldingHands = newState === 'holding_hands';
                 
                 let statusText, statusColor;
                 if (state.gunther.state === 'in_car') {
@@ -1199,6 +1352,7 @@
                 if (!currentIds.has(id)) {
                     scene.remove(mesh);
                     enemyMeshes.delete(id);
+                    SFX.enemyDeath();
                 }
             });
             
@@ -1350,6 +1504,7 @@
                 dirX: dir.x,
                 dirZ: dir.z
             });
+            SFX.shoot();
             
             // Tracer
             const tracer = new THREE.Mesh(
@@ -1447,12 +1602,14 @@
                     playerRotation = carRotation;
                     mouseX = -carRotation;
                     socket.emit('exitCar');
+                    SFX.enterCar();
                 } else {
                     const dist = Math.hypot(player.position.x - car.position.x, player.position.z - car.position.z);
                     if (dist < 6) {
                         isInCar = true;
                         player.visible = false;
                         socket.emit('enterCar');
+                        SFX.enterCar();
                     }
                 }
             }
@@ -1472,6 +1629,7 @@
         function endGame(won, msg) {
             gameStarted = false;
             document.exitPointerLock();
+            if (won) SFX.win(); else SFX.lose();
             const el = document.getElementById('end-screen');
             el.className = won ? 'win' : 'lose';
             el.style.display = 'flex';

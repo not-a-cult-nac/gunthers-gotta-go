@@ -455,6 +455,7 @@
         
         let scene, camera, renderer;
         let car, player, gunther, goal;
+        let handLinkGroup; // Visual connection when holding Gunther's hand
         let enemyMeshes = new Map();
         let otherPlayers = new Map();
         let isDriver = false;
@@ -848,6 +849,7 @@
             createCar();
             createPlayer();
             createGunther();
+            createHandLink();
             createGoal();
             createHazards();
             createScenery();
@@ -1064,6 +1066,103 @@
             
             gunther.visible = false;
             scene.add(gunther);
+        }
+        
+        function createHandLink() {
+            handLinkGroup = new THREE.Group();
+            
+            // Big thick yellow arm - cylinder that stretches between player and Gunther
+            const armGeometry = new THREE.CylinderGeometry(0.35, 0.45, 1, 12);
+            const armMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xffdd00, 
+                emissive: 0xffaa00, 
+                emissiveIntensity: 0.5 
+            });
+            const arm = new THREE.Mesh(armGeometry, armMaterial);
+            arm.name = 'arm';
+            handLinkGroup.add(arm);
+            
+            // Big cartoon hand at the end (toward Gunther)
+            const handGroup = new THREE.Group();
+            handGroup.name = 'hand';
+            
+            // Palm - big and chunky
+            const palm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.9, 0.6, 0.3),
+                armMaterial
+            );
+            handGroup.add(palm);
+            
+            // Fingers - 4 thick fingers
+            for (let i = 0; i < 4; i++) {
+                const finger = new THREE.Mesh(
+                    new THREE.CapsuleGeometry(0.1, 0.4, 4, 8),
+                    armMaterial
+                );
+                finger.position.set(-0.27 + i * 0.18, 0.45, 0);
+                finger.rotation.x = -0.2; // Slight curl
+                handGroup.add(finger);
+            }
+            
+            // Thumb - chunky
+            const thumb = new THREE.Mesh(
+                new THREE.CapsuleGeometry(0.12, 0.3, 4, 8),
+                armMaterial
+            );
+            thumb.position.set(0.55, 0.1, 0);
+            thumb.rotation.z = -1.0;
+            handGroup.add(thumb);
+            
+            handLinkGroup.add(handGroup);
+            
+            handLinkGroup.visible = false;
+            scene.add(handLinkGroup);
+        }
+        
+        function updateHandLink() {
+            if (!handLinkGroup || !player || !gunther) return;
+            
+            if (guntherHoldingHands && player.visible && gunther.visible) {
+                handLinkGroup.visible = true;
+                
+                // Get positions
+                const playerPos = player.position.clone();
+                playerPos.y += 1.2; // Hand height on player
+                
+                const guntherPos = gunther.position.clone();
+                guntherPos.y += 1.0; // Hand height on Gunther
+                
+                // Calculate arm direction and length
+                const direction = new THREE.Vector3().subVectors(guntherPos, playerPos);
+                const length = direction.length();
+                const midpoint = playerPos.clone().add(guntherPos).multiplyScalar(0.5);
+                
+                // Update arm
+                const arm = handLinkGroup.getObjectByName('arm');
+                if (arm) {
+                    arm.scale.y = length;
+                    arm.position.copy(midpoint);
+                    
+                    // Orient arm to point from player to Gunther
+                    const up = new THREE.Vector3(0, 1, 0);
+                    const quaternion = new THREE.Quaternion();
+                    quaternion.setFromUnitVectors(up, direction.clone().normalize());
+                    arm.quaternion.copy(quaternion);
+                }
+                
+                // Update hand position (at Gunther's end)
+                const hand = handLinkGroup.getObjectByName('hand');
+                if (hand) {
+                    // Position hand slightly before Gunther (so it looks like grabbing)
+                    const handPos = guntherPos.clone().sub(direction.clone().normalize().multiplyScalar(0.5));
+                    hand.position.copy(handPos);
+                    // Face the hand toward Gunther
+                    hand.lookAt(guntherPos);
+                    hand.rotation.x += Math.PI / 2; // Rotate so palm faces forward
+                }
+            } else {
+                handLinkGroup.visible = false;
+            }
         }
         
         function createGoal() {
@@ -1284,6 +1383,7 @@
                     lastGuntherState = newState;
                 }
                 guntherHoldingHands = newState === 'holding_hands';
+                updateHandLink();
                 
                 let statusText, statusColor;
                 if (state.gunther.state === 'in_car') {

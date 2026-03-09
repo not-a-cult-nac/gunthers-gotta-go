@@ -1093,10 +1093,10 @@
             );
             handGroup.add(palm);
             
-            // Fingers - 4 thick fingers
+            // Fingers - 4 thick fingers (using cylinder, r128 doesn't have CapsuleGeometry)
             for (let i = 0; i < 4; i++) {
                 const finger = new THREE.Mesh(
-                    new THREE.CapsuleGeometry(0.1, 0.4, 4, 8),
+                    new THREE.CylinderGeometry(0.08, 0.1, 0.5, 8),
                     armMaterial
                 );
                 finger.position.set(-0.27 + i * 0.18, 0.45, 0);
@@ -1106,7 +1106,7 @@
             
             // Thumb - chunky
             const thumb = new THREE.Mesh(
-                new THREE.CapsuleGeometry(0.12, 0.3, 4, 8),
+                new THREE.CylinderGeometry(0.1, 0.12, 0.4, 8),
                 armMaterial
             );
             thumb.position.set(0.55, 0.1, 0);

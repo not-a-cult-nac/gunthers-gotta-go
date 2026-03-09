@@ -1723,23 +1723,26 @@
                 camera.lookAt(car.position.x, car.position.y + 2, car.position.z);
             } else {
                 const runSpeed = 7 * delta;
-                // Use AI target rotation if set, otherwise mouse
+                const turnSpeed = 2.5 * delta;
+                
+                // Use AI target rotation if set, otherwise joystick/mouse
                 if (GameInput.targetRotation !== undefined) {
                     playerRotation = GameInput.targetRotation;
                 } else {
-                    playerRotation = -mouseX;
+                    // Joystick side = rotate (like car controls)
+                    if (GameInput.moveSide < 0) playerRotation += turnSpeed;
+                    if (GameInput.moveSide > 0) playerRotation -= turnSpeed;
                 }
                 
                 const forward = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
-                const right = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
                 
+                // Forward/back movement
                 if (GameInput.moveForward > 0) { player.position.x += forward.x * runSpeed; player.position.z += forward.z * runSpeed; }
-                if (GameInput.moveForward < 0) { player.position.x -= forward.x * runSpeed; player.position.z -= forward.z * runSpeed; }
-                if (GameInput.moveSide < 0) { player.position.x += right.x * runSpeed; player.position.z += right.z * runSpeed; }
-                if (GameInput.moveSide > 0) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
+                if (GameInput.moveForward < 0) { player.position.x -= forward.x * runSpeed * 0.6; player.position.z -= forward.z * runSpeed * 0.6; }
                 
                 player.position.y = getTerrainHeight(player.position.x, player.position.z);
                 player.rotation.y = playerRotation;
+                mouseX = -playerRotation;  // Keep mouse in sync
                 
                 socket.emit('playerUpdate', { x: player.position.x, z: player.position.z, inCar: false });
                 

@@ -754,14 +754,17 @@
                 touchMoveX = dx / maxDist;
                 touchMoveY = dy / maxDist;
                 
-                // Dead zone for side movement: if mostly pushing forward/back, go straight
-                // This makes it easier to walk in a straight line
-                const deadZone = 0.3;  // 30% dead zone
+                // Dead zone for side movement (on foot only)
+                // In car: full analog for steering
+                // On foot: dead zone helps walk in straight line
                 let sideInput = touchMoveX;
-                if (Math.abs(touchMoveY) > Math.abs(touchMoveX) * 2) {
-                    // Mostly forward/back - apply dead zone to sides
-                    if (Math.abs(sideInput) < deadZone) {
-                        sideInput = 0;
+                if (!isInCar) {
+                    const deadZone = 0.3;  // 30% dead zone
+                    if (Math.abs(touchMoveY) > Math.abs(touchMoveX) * 2) {
+                        // Mostly forward/back - apply dead zone to sides
+                        if (Math.abs(sideInput) < deadZone) {
+                            sideInput = 0;
+                        }
                     }
                 }
                 

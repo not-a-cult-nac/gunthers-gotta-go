@@ -480,6 +480,8 @@
         let gameStarted = false;
         let playerId = null;
         let serverState = null;
+        let lastHoldHandTime = 0; // Cooldown for hold/release to prevent flickering
+        let grabRangeRing; // Visual indicator for grab range
         
         const keys = {};
         
@@ -850,6 +852,7 @@
             createPlayer();
             createGunther();
             createHandLink();
+            createGrabRangeRing();
             createGoal();
             createHazards();
             createScenery();
@@ -1119,6 +1122,55 @@
             scene.add(handLinkGroup);
         }
         
+        function createGrabRangeRing() {
+            // Ring to show grab range (4 units radius)
+            const ringGeometry = new THREE.RingGeometry(3.8, 4.2, 32);
+            const ringMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x00ffff, 
+                transparent: true, 
+                opacity: 0.4,
+                side: THREE.DoubleSide
+            });
+            grabRangeRing = new THREE.Mesh(ringGeometry, ringMaterial);
+            grabRangeRing.rotation.x = -Math.PI / 2; // Lay flat on ground
+            grabRangeRing.visible = false;
+            scene.add(grabRangeRing);
+        }
+        
+        function updateGrabRangeRing() {
+            if (!grabRangeRing || !player) return;
+            
+            // Show ring when player is on foot and Gunther is grabbable
+            const guntherGrabbable = serverState && 
+                (serverState.gunther.state === 'wandering' || 
+                 serverState.gunther.state === 'trapped' ||
+                 serverState.gunther.state === 'holding_hands');
+            
+            if (!isInCar && guntherGrabbable) {
+                grabRangeRing.visible = true;
+                grabRangeRing.position.set(player.position.x, 0.1, player.position.z);
+                
+                // Pulse effect and color change based on distance to Gunther
+                if (serverState && serverState.gunther) {
+                    const dist = Math.hypot(
+                        player.position.x - serverState.gunther.x,
+                        player.position.z - serverState.gunther.z
+                    );
+                    if (dist < 4) {
+                        // In range - green and brighter
+                        grabRangeRing.material.color.setHex(0x00ff00);
+                        grabRangeRing.material.opacity = 0.6;
+                    } else {
+                        // Out of range - cyan
+                        grabRangeRing.material.color.setHex(0x00ffff);
+                        grabRangeRing.material.opacity = 0.3;
+                    }
+                }
+            } else {
+                grabRangeRing.visible = false;
+            }
+        }
+        
         function updateHandLink() {
             if (!handLinkGroup || !player || !gunther) return;
             
@@ -1384,6 +1436,7 @@
                 }
                 guntherHoldingHands = newState === 'holding_hands';
                 updateHandLink();
+                updateGrabRangeRing();
                 
                 let statusText, statusColor;
                 if (state.gunther.state === 'in_car') {
@@ -1708,7 +1761,10 @@
             }
             
             // SPACE to hold/release Gunther's hand (use GameInput)
-            if (GameInput.consumeAction('holdHand') && !isInCar) {
+            // 500ms cooldown to prevent flickering from rapid presses
+            const now = Date.now();
+            if (GameInput.consumeAction('holdHand') && !isInCar && (now - lastHoldHandTime > 500)) {
+                lastHoldHandTime = now;
                 if (guntherHoldingHands) {
                     socket.emit('releaseHand');
                 } else {

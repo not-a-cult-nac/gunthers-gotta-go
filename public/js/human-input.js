@@ -6,6 +6,8 @@ const HumanInput = {
     mouseDeltaX: 0,
     mouseDeltaY: 0,
     pendingShot: false,
+    isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+              || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2),
     
     init() {
         document.addEventListener('keydown', (e) => {
@@ -47,14 +49,16 @@ const HumanInput = {
     update() {
         if (GameInput.isAutoplay) return;
         
-        // Movement
-        GameInput.moveForward = 0;
-        GameInput.moveSide = 0;
-        
-        if (this.keys['KeyW']) GameInput.moveForward += 1;
-        if (this.keys['KeyS']) GameInput.moveForward -= 1;
-        if (this.keys['KeyA']) GameInput.moveSide -= 1;
-        if (this.keys['KeyD']) GameInput.moveSide += 1;
+        // Movement - skip on mobile (joystick handles it directly)
+        if (!this.isMobile) {
+            GameInput.moveForward = 0;
+            GameInput.moveSide = 0;
+            
+            if (this.keys['KeyW']) GameInput.moveForward += 1;
+            if (this.keys['KeyS']) GameInput.moveForward -= 1;
+            if (this.keys['KeyA']) GameInput.moveSide -= 1;
+            if (this.keys['KeyD']) GameInput.moveSide += 1;
+        }
         
         // Aiming
         GameInput.aimX += this.mouseDeltaX * 0.002;

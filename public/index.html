@@ -754,9 +754,20 @@
                 touchMoveX = dx / maxDist;
                 touchMoveY = dy / maxDist;
                 
+                // Dead zone for side movement: if mostly pushing forward/back, go straight
+                // This makes it easier to walk in a straight line
+                const deadZone = 0.3;  // 30% dead zone
+                let sideInput = touchMoveX;
+                if (Math.abs(touchMoveY) > Math.abs(touchMoveX) * 2) {
+                    // Mostly forward/back - apply dead zone to sides
+                    if (Math.abs(sideInput) < deadZone) {
+                        sideInput = 0;
+                    }
+                }
+                
                 // Set GameInput (new system) - direct analog values
                 GameInput.moveForward = -touchMoveY;  // Negative because up = forward
-                GameInput.moveSide = touchMoveX;
+                GameInput.moveSide = sideInput;
             }, { passive: false });
             
             const resetJoystick = () => {
@@ -803,10 +814,8 @@
             // Action buttons
             btnShoot.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                if (gameStarted && !isInCar) {
-                    GameInput.triggerAction('shoot');
-                    SFX.shoot();
-                }
+                // Just trigger action - game loop handles isInCar check
+                GameInput.triggerAction('shoot');
             }, { passive: false });
             
             btnAction.addEventListener('touchstart', (e) => {

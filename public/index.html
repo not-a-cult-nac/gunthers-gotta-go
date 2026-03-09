@@ -1823,6 +1823,10 @@
                 setTimeout(() => scene.remove(tracer), 50);
             }
             
+            // Update visual indicators every frame
+            updateGrabRangeRing();
+            updateHandLink();
+            
             // Reset input deltas
             if (typeof GameInput !== 'undefined') GameInput.resetDeltas();
         }

@@ -754,10 +754,19 @@
                 touchMoveX = dx / maxDist;
                 touchMoveY = dy / maxDist;
                 
+                // Dead zone: if pushing mostly forward/back, ignore small side input
+                // Helps drive/walk in straight line
+                const deadZone = 0.3;
+                let sideInput = touchMoveX;
+                if (Math.abs(touchMoveY) > Math.abs(touchMoveX) * 2) {
+                    if (Math.abs(sideInput) < deadZone) {
+                        sideInput = 0;
+                    }
+                }
+                
                 // Set GameInput - direct analog values
-                // Side = rotation (both in car and on foot)
                 GameInput.moveForward = -touchMoveY;  // Negative because up = forward
-                GameInput.moveSide = touchMoveX;
+                GameInput.moveSide = sideInput;
             }, { passive: false });
             
             const resetJoystick = () => {
@@ -1712,24 +1721,33 @@
                 const runSpeed = 7 * delta;
                 const turnSpeed = 2.5 * delta;
                 
-                // Use AI target rotation if set, otherwise joystick/mouse
+                // Use AI target rotation if set
                 if (GameInput.targetRotation !== undefined) {
                     playerRotation = GameInput.targetRotation;
-                } else {
-                    // Joystick side = rotate (like car controls)
+                } else if (isMobile) {
+                    // Mobile: tank controls (side = rotate, like car)
                     if (GameInput.moveSide < 0) playerRotation += turnSpeed;
                     if (GameInput.moveSide > 0) playerRotation -= turnSpeed;
+                } else {
+                    // Desktop: mouse controls rotation
+                    playerRotation = -mouseX;
                 }
                 
                 const forward = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
+                const right = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
                 
                 // Forward/back movement
                 if (GameInput.moveForward > 0) { player.position.x += forward.x * runSpeed; player.position.z += forward.z * runSpeed; }
                 if (GameInput.moveForward < 0) { player.position.x -= forward.x * runSpeed * 0.6; player.position.z -= forward.z * runSpeed * 0.6; }
                 
+                // Desktop: strafe with A/D
+                if (!isMobile) {
+                    if (GameInput.moveSide < 0) { player.position.x += right.x * runSpeed; player.position.z += right.z * runSpeed; }
+                    if (GameInput.moveSide > 0) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
+                }
+                
                 player.position.y = getTerrainHeight(player.position.x, player.position.z);
                 player.rotation.y = playerRotation;
-                mouseX = -playerRotation;  // Keep mouse in sync
                 
                 socket.emit('playerUpdate', { x: player.position.x, z: player.position.z, inCar: false });
                 

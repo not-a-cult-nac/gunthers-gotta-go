@@ -754,23 +754,10 @@
                 touchMoveX = dx / maxDist;
                 touchMoveY = dy / maxDist;
                 
-                // Dead zone for side movement (on foot only)
-                // In car: full analog for steering
-                // On foot: dead zone helps walk in straight line
-                let sideInput = touchMoveX;
-                if (!isInCar) {
-                    const deadZone = 0.3;  // 30% dead zone
-                    if (Math.abs(touchMoveY) > Math.abs(touchMoveX) * 2) {
-                        // Mostly forward/back - apply dead zone to sides
-                        if (Math.abs(sideInput) < deadZone) {
-                            sideInput = 0;
-                        }
-                    }
-                }
-                
-                // Set GameInput (new system) - direct analog values
+                // Set GameInput - direct analog values
+                // Side = rotation (both in car and on foot)
                 GameInput.moveForward = -touchMoveY;  // Negative because up = forward
-                GameInput.moveSide = sideInput;
+                GameInput.moveSide = touchMoveX;
             }, { passive: false });
             
             const resetJoystick = () => {

@@ -1794,6 +1794,22 @@
                     dirZ = Math.cos(playerRotation);
                 }
                 socket.emit('shoot', { x: player.position.x, z: player.position.z, dirX, dirZ });
+                SFX.shoot();
+                
+                // Tracer visual
+                const tracer = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.03, 0.03, 40),
+                    new THREE.MeshBasicMaterial({ color: 0xffff00 })
+                );
+                tracer.position.copy(player.position);
+                tracer.position.y += 1.2;
+                tracer.position.x += dirX * 20;
+                tracer.position.z += dirZ * 20;
+                tracer.rotation.x = Math.PI / 2;
+                tracer.rotation.order = 'YXZ';
+                tracer.rotation.y = Math.atan2(dirX, dirZ);
+                scene.add(tracer);
+                setTimeout(() => scene.remove(tracer), 50);
             }
             
             // Reset input deltas

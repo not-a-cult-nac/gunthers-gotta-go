@@ -54,10 +54,6 @@ const holdingHandsQuotes = [
 
 // Hazard positions along the 500m route
 const HAZARDS = [
-    // Lava pits
-    { x: 40, z: 50, type: 'lava', radius: 12 },
-    { x: -35, z: 180, type: 'lava', radius: 10 },
-    { x: 50, z: 320, type: 'lava', radius: 14 },
     // Cliffs
     { x: -50, z: 100, type: 'cliff', radius: 15 },
     { x: 55, z: 250, type: 'cliff', radius: 12 },

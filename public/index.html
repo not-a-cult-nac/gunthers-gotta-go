@@ -78,12 +78,12 @@
         }
         #goal-arrow .arrow { font-size: 32px; }
         #gunther-arrow {
-            top: 140px; left: 50%; transform: translateX(-50%);
+            top: 95px; left: 50%; transform: translateX(-50%);
             color: #ffeb3b;
             display: none;
         }
         #gunther-arrow .arrow { font-size: 28px; display: none; }
-        #gunther-arrow .distance { font-size: 22px; color: #fff; font-weight: bold; }
+        #gunther-arrow .distance { font-size: 20px; color: #fff; font-weight: bold; }
         
         /* Boost bar */
         #boost-bar-container {
@@ -647,9 +647,6 @@
         
         // Hazards (must match server)
         const HAZARDS = [
-            { x: 40, z: 50, type: 'lava', radius: 12 },
-            { x: -35, z: 180, type: 'lava', radius: 10 },
-            { x: 50, z: 320, type: 'lava', radius: 14 },
             { x: -50, z: 100, type: 'cliff', radius: 15 },
             { x: 55, z: 250, type: 'cliff', radius: 12 },
             { x: -45, z: 380, type: 'cliff', radius: 15 },
@@ -2201,23 +2198,26 @@
             
             const dir = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
             
+            // Get gun muzzle position (offset from player towards right side)
+            const rightOffset = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
+            const gunX = player.position.x + rightOffset.x * 0.4 + dir.x * 0.3;
+            const gunZ = player.position.z + rightOffset.z * 0.4 + dir.z * 0.3;
+            const gunY = player.position.y + 1.0;
+            
             socket.emit('shoot', {
-                x: player.position.x,
-                z: player.position.z,
+                x: gunX,
+                z: gunZ,
                 dirX: dir.x,
                 dirZ: dir.z
             });
             SFX.shoot();
             
-            // Tracer
+            // Tracer from gun muzzle toward reticle (center of screen)
             const tracer = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.03, 0.03, 40),
                 new THREE.MeshBasicMaterial({ color: 0xffff00 })
             );
-            tracer.position.copy(player.position);
-            tracer.position.y += 1.2;
-            tracer.position.x += dir.x * 20;
-            tracer.position.z += dir.z * 20;
+            tracer.position.set(gunX + dir.x * 20, gunY, gunZ + dir.z * 20);
             tracer.rotation.x = Math.PI / 2;
             tracer.rotation.order = 'YXZ';
             tracer.rotation.y = playerRotation;
@@ -2276,19 +2276,43 @@
                     
                     const forward = new THREE.Vector3(Math.sin(carRotation), 0, Math.cos(carRotation));
                     
+                    // Calculate slope in direction of travel for speed adjustment
+                    const sampleDist = 2;
+                    const currentY = getTerrainHeight(car.position.x, car.position.z);
+                    const aheadY = getTerrainHeight(
+                        car.position.x + forward.x * sampleDist,
+                        car.position.z + forward.z * sampleDist
+                    );
+                    const slope = (aheadY - currentY) / sampleDist; // positive = uphill
+                    
+                    // Adjust speed based on slope: slower uphill, faster downhill
+                    const slopeMultiplier = 1 - slope * 0.8; // -0.8 uphill penalty, +0.8 downhill boost
+                    const adjustedSpeed = driveSpeed * Math.max(0.3, Math.min(1.5, slopeMultiplier));
+                    
                     if (GameInput.moveForward > 0) {
-                        car.position.x += forward.x * driveSpeed * GameInput.moveForward;
-                        car.position.z += forward.z * driveSpeed * GameInput.moveForward;
+                        car.position.x += forward.x * adjustedSpeed * GameInput.moveForward;
+                        car.position.z += forward.z * adjustedSpeed * GameInput.moveForward;
                     }
                     if (GameInput.moveForward < 0) {
-                        car.position.x += forward.x * driveSpeed * 0.5 * GameInput.moveForward;
-                        car.position.z += forward.z * driveSpeed * 0.5 * GameInput.moveForward;
+                        car.position.x += forward.x * adjustedSpeed * 0.5 * GameInput.moveForward;
+                        car.position.z += forward.z * adjustedSpeed * 0.5 * GameInput.moveForward;
                     }
                     
                     car.position.x = Math.max(-80, Math.min(80, car.position.x));
                     car.position.z = Math.max(START_Z - 20, Math.min(GOAL_Z + 20, car.position.z));
                     car.position.y = getTerrainHeight(car.position.x, car.position.z);
-                    car.rotation.y = carRotation;
+                    
+                    // Make jeep follow terrain - tilt based on slope
+                    const rightDir = new THREE.Vector3(Math.cos(carRotation), 0, -Math.sin(carRotation));
+                    const frontY = getTerrainHeight(car.position.x + forward.x * 2, car.position.z + forward.z * 2);
+                    const backY = getTerrainHeight(car.position.x - forward.x * 2, car.position.z - forward.z * 2);
+                    const leftY = getTerrainHeight(car.position.x - rightDir.x * 1.5, car.position.z - rightDir.z * 1.5);
+                    const rightY = getTerrainHeight(car.position.x + rightDir.x * 1.5, car.position.z + rightDir.z * 1.5);
+                    
+                    const pitchAngle = Math.atan2(frontY - backY, 4) * 0.8;
+                    const rollAngle = Math.atan2(rightY - leftY, 3) * 0.8;
+                    
+                    car.rotation.set(pitchAngle, carRotation, rollAngle);
                     
                     socket.emit('carUpdate', { x: car.position.x, z: car.position.z, rotation: carRotation });
                     

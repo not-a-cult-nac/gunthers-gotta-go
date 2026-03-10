@@ -2190,9 +2190,15 @@
                     mesh.position.copy(car.position);
                     mesh.position.y += 2;
                 } else {
-                    // On foot
+                    // On foot - tilt with terrain
                     mesh.visible = true;
-                    mesh.position.set(p.x, getTerrainHeight(p.x, p.z), p.z);
+                    const pGroundY = getTerrainHeight(p.x, p.z);
+                    mesh.position.set(p.x, pGroundY, p.z);
+                    // Calculate terrain pitch for player model
+                    const pFrontY = getTerrainHeight(p.x, p.z + 1);
+                    const pBackY = getTerrainHeight(p.x, p.z - 1);
+                    const pPitch = -Math.atan2(pFrontY - pBackY, 2) * 0.6;
+                    mesh.rotation.set(pPitch, mesh.rotation.y, 0);
                 }
             }
             
@@ -2344,8 +2350,8 @@
                     
                     // Pitch: nose down when going uphill (front higher than back)
                     const pitchAngle = -Math.atan2(frontY - backY, 5) * 0.9;
-                    // Roll: tilt into slopes
-                    const rollAngle = -Math.atan2(rightY - leftY, 3) * 0.9;
+                    // Roll: tilt into slopes (swapped direction)
+                    const rollAngle = Math.atan2(rightY - leftY, 3) * 0.9;
                     
                     car.rotation.set(pitchAngle, carRotation, rollAngle);
                     
@@ -2392,14 +2398,24 @@
                 const forward = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
                 const right = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
                 
-                // Forward/back movement
-                if (GameInput.moveForward > 0) { player.position.x += forward.x * runSpeed; player.position.z += forward.z * runSpeed; }
-                if (GameInput.moveForward < 0) { player.position.x -= forward.x * runSpeed * 0.6; player.position.z -= forward.z * runSpeed * 0.6; }
+                // Calculate slope for speed adjustment
+                const currentY = getTerrainHeight(player.position.x, player.position.z);
+                const aheadY = getTerrainHeight(
+                    player.position.x + forward.x * 1.5,
+                    player.position.z + forward.z * 1.5
+                );
+                const playerSlope = (aheadY - currentY) / 1.5;
+                const slopeSpeedMult = Math.max(0.4, Math.min(1.4, 1 - playerSlope * 0.6));
+                const adjustedRunSpeed = runSpeed * slopeSpeedMult;
+                
+                // Forward/back movement (slope-adjusted)
+                if (GameInput.moveForward > 0) { player.position.x += forward.x * adjustedRunSpeed; player.position.z += forward.z * adjustedRunSpeed; }
+                if (GameInput.moveForward < 0) { player.position.x -= forward.x * adjustedRunSpeed * 0.6; player.position.z -= forward.z * adjustedRunSpeed * 0.6; }
                 
                 // Desktop: strafe with A/D
                 if (!isMobile) {
-                    if (GameInput.moveSide < 0) { player.position.x += right.x * runSpeed; player.position.z += right.z * runSpeed; }
-                    if (GameInput.moveSide > 0) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
+                    if (GameInput.moveSide < 0) { player.position.x += right.x * adjustedRunSpeed; player.position.z += right.z * adjustedRunSpeed; }
+                    if (GameInput.moveSide > 0) { player.position.x -= right.x * adjustedRunSpeed; player.position.z -= right.z * adjustedRunSpeed; }
                 }
                 
                 // Jump!
@@ -2420,7 +2436,11 @@
                     isOnGround = true;
                 }
                 
-                player.rotation.y = playerRotation;
+                // Player model tilts with terrain
+                const frontPlayerY = getTerrainHeight(player.position.x + forward.x, player.position.z + forward.z);
+                const backPlayerY = getTerrainHeight(player.position.x - forward.x, player.position.z - forward.z);
+                const playerPitch = -Math.atan2(frontPlayerY - backPlayerY, 2) * 0.7;
+                player.rotation.set(playerPitch, playerRotation, 0);
                 player.visible = false;  // Hide player model in first person
                 
                 socket.emit('playerUpdate', { x: player.position.x, z: player.position.z, inCar: false });
@@ -2450,7 +2470,7 @@
                         gunViewModel.position.x += forward.x * 0.5 + right.x * 0.3;
                         gunViewModel.position.z += forward.z * 0.5 + right.z * 0.3;
                         gunViewModel.position.y -= 0.3;
-                        gunViewModel.rotation.y = playerRotation;
+                        gunViewModel.rotation.set(-cameraPitch, playerRotation, 0); // Pitch gun with camera
                     }
                 }
             }
@@ -2503,35 +2523,32 @@
             const shootNow = Date.now();
             if (GameInput.consumeAction('shoot') && !isInCar && !guntherHoldingHands && (shootNow - lastShootTime > 200)) {
                 lastShootTime = shootNow;
-                let dirX, dirZ;
-                // AI can specify custom shoot direction
-                if (GameInput.shootDirection) {
-                    dirX = GameInput.shootDirection.x;
-                    dirZ = GameInput.shootDirection.z;
-                    GameInput.shootDirection = null;  // Consume it
-                } else {
-                    dirX = Math.sin(playerRotation);
-                    dirZ = Math.cos(playerRotation);
-                }
+                
+                // 3D direction toward reticle (includes vertical pitch)
+                const horizontalDir = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
+                const dirX = horizontalDir.x * Math.cos(cameraPitch);
+                const dirY = Math.sin(cameraPitch);
+                const dirZ = horizontalDir.z * Math.cos(cameraPitch);
                 
                 // Gun muzzle position (offset from player towards right side)
                 const rightDir = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
-                const gunX = player.position.x + rightDir.x * 0.4 + dirX * 0.5;
-                const gunZ = player.position.z + rightDir.z * 0.4 + dirZ * 0.5;
+                const gunX = player.position.x + rightDir.x * 0.4 + horizontalDir.x * 0.5;
+                const gunZ = player.position.z + rightDir.z * 0.4 + horizontalDir.z * 0.5;
                 const gunY = player.position.y + 1.0;
                 
-                socket.emit('shoot', { x: gunX, z: gunZ, dirX, dirZ });
+                socket.emit('shoot', { x: gunX, z: gunZ, dirX: horizontalDir.x, dirZ: horizontalDir.z });
                 SFX.shoot();
                 
-                // Tracer visual from gun muzzle
+                // Tracer visual from gun muzzle toward reticle (3D direction)
                 const tracer = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.03, 0.03, 40),
                     new THREE.MeshBasicMaterial({ color: 0xffff00 })
                 );
-                tracer.position.set(gunX + dirX * 20, gunY, gunZ + dirZ * 20);
-                tracer.rotation.x = Math.PI / 2;
-                tracer.rotation.order = 'YXZ';
-                tracer.rotation.y = Math.atan2(dirX, dirZ);
+                // Position tracer along the 3D ray
+                tracer.position.set(gunX + dirX * 20, gunY + dirY * 20, gunZ + dirZ * 20);
+                // Orient tracer to point in shoot direction
+                const tracerDir = new THREE.Vector3(dirX, dirY, dirZ).normalize();
+                tracer.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tracerDir);
                 scene.add(tracer);
                 setTimeout(() => scene.remove(tracer), 50);
             }

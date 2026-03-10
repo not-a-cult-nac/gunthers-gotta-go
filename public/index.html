@@ -909,14 +909,14 @@
         }
         
         // Seat positions in the jeep (local coordinates)
-        // Car model faces -Z but drives toward +Z, so +Z is "front" for seating
+        // Car faces +Z direction (hood at +Z, back at -Z)
         const SEAT_POSITIONS = [
-            { x: -0.7, y: 1.3, z: 1.2, label: 'driver' },       // Front left - driver (toward +Z driving direction)
-            { x: 0.7, y: 1.3, z: 1.2, label: 'passenger' },     // Front right
-            { x: -0.7, y: 1.3, z: -0.8, label: 'back-left' },   // Back left
-            { x: 0.7, y: 1.3, z: -0.8, label: 'back-right' },   // Back right
+            { x: -0.7, y: 1.3, z: 0.8, label: 'driver' },       // Front left - driver
+            { x: 0.7, y: 1.3, z: 0.8, label: 'passenger' },     // Front right
+            { x: -0.7, y: 1.3, z: -1.2, label: 'back-left' },   // Back left
+            { x: 0.7, y: 1.3, z: -1.2, label: 'back-right' },   // Back right
         ];
-        const GUNTHER_SEAT = { x: 0, y: 1.3, z: -0.8 };  // Middle back seat
+        const GUNTHER_SEAT = { x: 0, y: 1.3, z: -1.2 };  // Middle back seat
         
         let seatOccupants = {};  // playerId -> seat index
         
@@ -1957,7 +1957,7 @@
                 }
             }
             
-            // SPACE to grab/toss Gunther (use GameInput)
+            // Right-click to grab/toss Gunther (use GameInput)
             // 500ms cooldown to prevent rapid toggling
             const now = Date.now();
             if (GameInput.consumeAction('holdHand') && !isInCar && (now - lastHoldHandTime > 500)) {

@@ -78,7 +78,7 @@
         }
         #goal-arrow .arrow { font-size: 32px; }
         #gunther-arrow {
-            top: 95px; left: 50%; transform: translateX(-50%);
+            top: 65px; left: 50%; transform: translateX(-50%);
             color: #ffeb3b;
             display: none;
         }
@@ -1438,7 +1438,7 @@
             
             // Goal arrow - always visible, above view
             const goalArrowPos = basePos.clone();
-            goalArrowPos.y += 0.8;
+            goalArrowPos.y += 1.1;
             goalArrow3D.position.copy(goalArrowPos);
             
             // Calculate direction to goal from camera
@@ -1458,7 +1458,7 @@
             
             if (guntherVisible && serverState) {
                 const guntherArrowPos = basePos.clone();
-                guntherArrowPos.y += 0.55;
+                guntherArrowPos.y += 0.85;
                 guntherArrow3D.position.copy(guntherArrowPos);
                 
                 const toGunther = new THREE.Vector3(

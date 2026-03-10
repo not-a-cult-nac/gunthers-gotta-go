@@ -39,8 +39,9 @@ const HumanInput = {
             }
         });
         
-        document.addEventListener('click', () => {
-            if (document.pointerLockElement) {
+        // Left-click to shoot (button 0 only)
+        document.addEventListener('mousedown', (e) => {
+            if (document.pointerLockElement && e.button === 0) {
                 this.pendingShot = true;
             }
         });

@@ -171,6 +171,9 @@
         let scene, camera, renderer;
         let tank, gunther, goal;
         let enemies = [];
+        let scouts = [];
+        let clumps = [];
+        let flares = [];
         let hazards = [];
         let bullets = [];
         let isInTank = true;
@@ -178,6 +181,13 @@
         let guntherCaptor = null;
         let gameStarted = false;
         let gameOver = false;
+        
+        // Clustering constants
+        const LURE_DISTANCE = 40;
+        const SCOUT_DETECTION_RANGE = 35;
+        const AMBUSH_POINTS = [30, 60, 90, 120]; // Z positions for ambush clumps
+        let clumpIdCounter = 0;
+        let ambushesSpawned = new Set();
         
         // Controls
         const keys = {};
@@ -253,10 +263,9 @@
             // Create goal
             createGoal();
             
-            // Create some initial enemies
-            for (let i = 0; i < 3; i++) {
-                spawnEnemy();
-            }
+            // Create initial scout and a couple roaming enemies
+            spawnScout();
+            spawnEnemy();  // A few free-roaming enemies to start
             
             // Event listeners
             document.addEventListener('keydown', (e) => keys[e.code] = true);
@@ -508,6 +517,149 @@
             
             scene.add(enemy);
             enemies.push(enemy);
+            return enemy;
+        }
+        
+        function spawnClumpEnemy(x, z, clumpId) {
+            const enemy = spawnEnemy();
+            enemy.position.set(x, 0, z);
+            enemy.userData.dormant = true;
+            enemy.userData.clumpId = clumpId;
+            // Make dormant enemies slightly transparent
+            enemy.children.forEach(child => {
+                if (child.material) child.material.opacity = 0.7;
+            });
+            return enemy;
+        }
+        
+        function spawnClump(z, size = 'small') {
+            const clumpId = clumpIdCounter++;
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const baseX = side * (15 + Math.random() * 15);
+            const enemyCount = size === 'large' ? 6 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 2);
+            
+            const clump = {
+                id: clumpId,
+                x: baseX,
+                z: z,
+                alerted: false,
+                enemyIds: []
+            };
+            
+            for (let i = 0; i < enemyCount; i++) {
+                const offsetX = (Math.random() - 0.5) * 10;
+                const offsetZ = (Math.random() - 0.5) * 10;
+                const enemy = spawnClumpEnemy(baseX + offsetX, z + offsetZ, clumpId);
+                clump.enemyIds.push(enemies.indexOf(enemy));
+            }
+            
+            clumps.push(clump);
+            return clump;
+        }
+        
+        function spawnScout() {
+            const scout = new THREE.Group();
+            
+            // Slimmer body - scouts are sneaky
+            const bodyGeo = new THREE.CylinderGeometry(0.35, 0.45, 1.6);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27 }); // Dark green - camouflage
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.0;
+            body.castShadow = true;
+            scout.add(body);
+            
+            // Head
+            const headGeo = new THREE.SphereGeometry(0.35);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.1;
+            head.castShadow = true;
+            scout.add(head);
+            
+            // Beret
+            const beretGeo = new THREE.SphereGeometry(0.4, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+            const beretMat = new THREE.MeshStandardMaterial({ color: 0x228b22 });
+            const beret = new THREE.Mesh(beretGeo, beretMat);
+            beret.position.y = 2.3;
+            scout.add(beret);
+            
+            // Flare gun
+            const gunGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.5);
+            const gunMat = new THREE.MeshStandardMaterial({ color: 0xff4500 }); // Orange-red
+            const gun = new THREE.Mesh(gunGeo, gunMat);
+            gun.rotation.z = Math.PI / 2;
+            gun.position.set(0.5, 1.5, 0);
+            scout.add(gun);
+            
+            // Spawn ahead of player
+            const side = Math.random() > 0.5 ? 1 : -1;
+            scout.position.set(
+                side * (10 + Math.random() * 25),
+                0,
+                tank.position.z + 40 + Math.random() * 40
+            );
+            
+            scout.userData = {
+                health: 1,
+                speed: 1.5 + Math.random() * 0.5,
+                hasFired: false,
+                wanderAngle: Math.random() * Math.PI * 2,
+                wanderTimer: 0
+            };
+            
+            scene.add(scout);
+            scouts.push(scout);
+        }
+        
+        function fireFlare(scout) {
+            // Create flare visual
+            const flareGeo = new THREE.SphereGeometry(0.3);
+            const flareMat = new THREE.MeshBasicMaterial({ color: 0xff0000, emissive: 0xff0000 });
+            const flare = new THREE.Mesh(flareGeo, flareMat);
+            flare.position.copy(scout.position);
+            flare.position.y = 3;
+            flare.userData = { age: 0, maxAge: 3 };
+            scene.add(flare);
+            flares.push(flare);
+            
+            // Add point light for dramatic effect
+            const light = new THREE.PointLight(0xff0000, 2, 50);
+            light.position.copy(flare.position);
+            scene.add(light);
+            flare.userData.light = light;
+            
+            // Alert nearest clump
+            let nearestClump = null;
+            let nearestDist = Infinity;
+            for (const clump of clumps) {
+                if (!clump.alerted) {
+                    const dx = clump.x - scout.position.x;
+                    const dz = clump.z - scout.position.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearestClump = clump;
+                    }
+                }
+            }
+            
+            if (nearestClump) {
+                alertClump(nearestClump);
+            }
+        }
+        
+        function alertClump(clump) {
+            clump.alerted = true;
+            // Wake up all enemies in the clump
+            for (const enemy of enemies) {
+                if (enemy.userData.clumpId === clump.id) {
+                    enemy.userData.dormant = false;
+                    // Make them fully visible
+                    enemy.children.forEach(child => {
+                        if (child.material) child.material.opacity = 1.0;
+                    });
+                }
+            }
         }
         
         function onMouseMove(e) {
@@ -555,6 +707,31 @@
                         
                         // Spawn replacement
                         setTimeout(spawnEnemy, 3000);
+                    }
+                    break;
+                }
+            }
+            
+            // Check scout hits
+            for (let i = scouts.length - 1; i >= 0; i--) {
+                const scout = scouts[i];
+                const intersects = raycaster.intersectObjects(scout.children, true);
+                
+                if (intersects.length > 0 && intersects[0].distance < 50) {
+                    scout.userData.health--;
+                    
+                    // Flash red
+                    scout.children.forEach(child => {
+                        if (child.material) {
+                            const originalColor = child.material.color.getHex();
+                            child.material.color.setHex(0xff0000);
+                            setTimeout(() => child.material.color.setHex(originalColor), 100);
+                        }
+                    });
+                    
+                    if (scout.userData.health <= 0) {
+                        scene.remove(scout);
+                        scouts.splice(i, 1);
                     }
                     break;
                 }
@@ -704,8 +881,83 @@
                 }
             }
             
+            // Spawn clumps at ambush points as player approaches
+            AMBUSH_POINTS.forEach(ambushZ => {
+                if (!ambushesSpawned.has(ambushZ) && tank.position.z + 50 > ambushZ) {
+                    ambushesSpawned.add(ambushZ);
+                    const size = ambushZ > 70 ? 'large' : 'small';
+                    spawnClump(ambushZ, size);
+                }
+            });
+            
+            // Spawn scouts periodically
+            if (Math.random() < 0.001 && scouts.length < 2) {
+                spawnScout();
+            }
+            
+            // Update scouts
+            scouts.forEach(scout => {
+                const distToTank = scout.position.distanceTo(tank.position);
+                
+                // Check if scout detects player
+                if (!scout.userData.hasFired && distToTank < SCOUT_DETECTION_RANGE) {
+                    scout.userData.hasFired = true;
+                    fireFlare(scout);
+                    showGuntherSpeech("Ooh! Pretty red light in ze sky!");
+                }
+                
+                // Scout movement
+                if (scout.userData.hasFired) {
+                    // After firing, chase like normal enemy
+                    const dir = tank.position.clone().sub(scout.position).normalize();
+                    scout.position.addScaledVector(dir, scout.userData.speed * delta);
+                } else {
+                    // Wander randomly
+                    scout.userData.wanderTimer -= delta;
+                    if (scout.userData.wanderTimer <= 0) {
+                        scout.userData.wanderAngle += (Math.random() - 0.5) * Math.PI;
+                        scout.userData.wanderTimer = 1 + Math.random() * 2;
+                    }
+                    scout.position.x += Math.sin(scout.userData.wanderAngle) * scout.userData.speed * 0.4 * delta;
+                    scout.position.z += Math.cos(scout.userData.wanderAngle) * scout.userData.speed * 0.4 * delta;
+                    scout.position.x = Math.max(-40, Math.min(40, scout.position.x));
+                }
+            });
+            
+            // Update flares
+            for (let i = flares.length - 1; i >= 0; i--) {
+                const flare = flares[i];
+                flare.userData.age += delta;
+                flare.position.y += delta * 5; // Rise up
+                
+                // Pulsing effect
+                const scale = 1 + Math.sin(flare.userData.age * 10) * 0.3;
+                flare.scale.set(scale, scale, scale);
+                
+                if (flare.userData.age > flare.userData.maxAge) {
+                    if (flare.userData.light) scene.remove(flare.userData.light);
+                    scene.remove(flare);
+                    flares.splice(i, 1);
+                }
+            }
+            
             // Enemy AI
             enemies.forEach(enemy => {
+                // Check for lure distance waking up dormant enemies
+                if (enemy.userData.dormant) {
+                    const distToTank = enemy.position.distanceTo(tank.position);
+                    if (distToTank < LURE_DISTANCE) {
+                        // Wake up this enemy and its clump
+                        const clump = clumps.find(c => c.id === enemy.userData.clumpId);
+                        if (clump) {
+                            alertClump(clump);
+                        } else {
+                            enemy.userData.dormant = false;
+                        }
+                    }
+                    return; // Don't move while dormant
+                }
+                
                 if (guntherState === 'wandering' && !enemy.userData.hasGunther) {
                     // Chase Gunther
                     const dir = gunther.position.clone().sub(enemy.position).normalize();
@@ -740,9 +992,13 @@
             // Update UI
             document.getElementById('enemy-count').textContent = enemies.length;
             
-            // Spawn enemies over time
-            if (Math.random() < 0.002) {
-                spawnEnemy();
+            // Spawn random clumps ahead (supplementing fixed ambush points)
+            if (Math.random() < 0.001 && clumps.length < 6) {
+                const spawnZ = tank.position.z + 50 + Math.random() * 40;
+                const nearAmbush = AMBUSH_POINTS.some(az => Math.abs(az - spawnZ) < 20);
+                if (!nearAmbush) {
+                    spawnClump(spawnZ, Math.random() > 0.6 ? 'large' : 'small');
+                }
             }
         }
         

@@ -35,6 +35,11 @@ const GOAL_Z = 440;
 const START_Z = -60;
 const ENEMY_DETECTION_RANGE = 50;
 
+// Clustering constants
+const LURE_DISTANCE = 40;
+const SCOUT_DETECTION_RANGE = 35;
+const AMBUSH_POINTS = [80, 180, 280, 380]; // Fixed Z positions for ambush clumps
+
 const DEFAULT_CONFIG = {
     escapeRate: 0.05,
     lureRange: 12,
@@ -57,6 +62,10 @@ function createInitialState(config = DEFAULT_CONFIG) {
             strain: 0 
         },
         enemies: [],
+        clumps: [],
+        scouts: [],
+        clumpIdCounter: 0,
+        scoutIdCounter: 0,
         gameState: 'playing',
         enemyIdCounter: 0,
         time: 0,
@@ -66,21 +75,92 @@ function createInitialState(config = DEFAULT_CONFIG) {
 }
 
 // Pure function: (state, random) -> enemy
-function spawnEnemy(state, random) {
-    const minZ = Math.max(START_Z, state.car.z);
-    const maxZ = Math.min(GOAL_Z - 30, state.car.z + 80);
+function spawnEnemy(state, random, options = {}) {
+    const { x, z, dormant = false } = options;
     
-    const side = random() > 0.5 ? 1 : -1;
+    let enemyX, enemyZ;
+    if (x !== undefined && z !== undefined) {
+        // Spawn at specific position (for clumps)
+        enemyX = x;
+        enemyZ = z;
+    } else {
+        // Random spawn (legacy behavior)
+        const minZ = Math.max(START_Z, state.car.z);
+        const maxZ = Math.min(GOAL_Z - 30, state.car.z + 80);
+        const side = random() > 0.5 ? 1 : -1;
+        enemyX = side * (20 + random() * 25);
+        enemyZ = minZ + random() * (maxZ - minZ);
+    }
+    
     const baseSpeed = state.config.enemySpeed;
     return {
         id: state.enemyIdCounter++,
-        x: side * (20 + random() * 25),
-        z: minZ + random() * (maxZ - minZ),
+        x: enemyX,
+        z: enemyZ,
         health: 2,
         hasGunther: false,
         speed: baseSpeed + random() * (baseSpeed * 0.5),
         vx: 0,
-        vz: 0
+        vz: 0,
+        dormant: dormant,
+        clumpId: options.clumpId || null
+    };
+}
+
+// Spawn a clump of enemies at a position
+function spawnClump(state, random, z, size = 'small') {
+    const clumpId = state.clumpIdCounter++;
+    const side = random() > 0.5 ? 1 : -1;
+    const baseX = side * (15 + random() * 20);
+    
+    const enemyCount = size === 'large' ? 6 + Math.floor(random() * 5) : 3 + Math.floor(random() * 3);
+    const enemies = [];
+    
+    for (let i = 0; i < enemyCount; i++) {
+        const offsetX = (random() - 0.5) * 12;
+        const offsetZ = (random() - 0.5) * 12;
+        const enemy = spawnEnemy(state, random, {
+            x: baseX + offsetX,
+            z: z + offsetZ,
+            dormant: true,
+            clumpId: clumpId
+        });
+        enemies.push(enemy);
+        state.enemies.push(enemy);
+    }
+    
+    const clump = {
+        id: clumpId,
+        x: baseX,
+        z: z,
+        alerted: false,
+        size: size,
+        enemyIds: enemies.map(e => e.id)
+    };
+    
+    return clump;
+}
+
+// Spawn a scout enemy
+function spawnScout(state, random) {
+    const minZ = Math.max(START_Z + 40, state.car.z + 30);
+    const maxZ = Math.min(GOAL_Z - 50, state.car.z + 100);
+    if (minZ >= maxZ) return null;
+    
+    const side = random() > 0.5 ? 1 : -1;
+    const baseSpeed = state.config.enemySpeed * 0.7; // Scouts are slower
+    
+    return {
+        id: state.scoutIdCounter++,
+        x: side * (10 + random() * 30),
+        z: minZ + random() * (maxZ - minZ),
+        health: 1, // Scouts are fragile
+        speed: baseSpeed,
+        vx: 0,
+        vz: 0,
+        hasFired: false,
+        wanderAngle: random() * Math.PI * 2,
+        wanderTimer: 0
     };
 }
 
@@ -101,16 +181,50 @@ function updateGame(state, delta, inputs, random) {
     // Update gunther based on state
     updateGunther(newState, delta, random, events);
     
+    // Update scouts
+    updateScouts(newState, delta, random, events);
+    
     // Update enemies
     updateEnemies(newState, delta);
     
-    // Spawn more enemies
-    if (random() < 0.008 && newState.enemies.length < 8) {
-        newState.enemies.push(spawnEnemy(newState, random));
+    // Spawn clumps at ambush points as player approaches
+    for (const ambushZ of AMBUSH_POINTS) {
+        const alreadySpawned = newState.clumps.some(c => Math.abs(c.z - ambushZ) < 20);
+        if (!alreadySpawned && newState.car.z + 120 > ambushZ && newState.car.z < ambushZ) {
+            // Spawn larger clumps closer to goal
+            const size = ambushZ > 250 ? 'large' : 'small';
+            const clump = spawnClump(newState, random, ambushZ, size);
+            newState.clumps.push(clump);
+        }
+    }
+    
+    // Spawn random clumps ahead (hybrid system)
+    if (random() < 0.003 && newState.clumps.length < 8) {
+        const spawnZ = newState.car.z + 60 + random() * 60;
+        if (spawnZ < GOAL_Z - 40) {
+            const nearAmbush = AMBUSH_POINTS.some(az => Math.abs(az - spawnZ) < 30);
+            if (!nearAmbush) {
+                const size = spawnZ > 300 ? (random() > 0.5 ? 'large' : 'small') : 'small';
+                const clump = spawnClump(newState, random, spawnZ, size);
+                newState.clumps.push(clump);
+            }
+        }
+    }
+    
+    // Spawn scouts periodically
+    if (random() < 0.002 && newState.scouts.length < 3) {
+        const scout = spawnScout(newState, random);
+        if (scout) newState.scouts.push(scout);
     }
     
     // Remove enemies too far behind
     newState.enemies = newState.enemies.filter(e => e.z > newState.car.z - 80 || e.hasGunther);
+    
+    // Remove clumps too far behind
+    newState.clumps = newState.clumps.filter(c => c.z > newState.car.z - 60);
+    
+    // Remove scouts too far behind
+    newState.scouts = newState.scouts.filter(s => s.z > newState.car.z - 60);
     
     // Win check
     const goalDist = Math.hypot(newState.car.x, newState.car.z - GOAL_Z);
@@ -493,8 +607,100 @@ function updateGuntherCaptured(state, delta, events) {
     }
 }
 
+// Update scout enemies - they roam and fire flares
+function updateScouts(state, delta, random, events) {
+    for (const scout of state.scouts) {
+        const prevX = scout.x;
+        const prevZ = scout.z;
+        
+        const distToCar = Math.hypot(scout.x - state.car.x, scout.z - state.car.z);
+        
+        // Check if scout detects player
+        if (!scout.hasFired && distToCar < SCOUT_DETECTION_RANGE) {
+            scout.hasFired = true;
+            
+            // Find nearest dormant clump to alert
+            let nearestClump = null;
+            let nearestDist = Infinity;
+            for (const clump of state.clumps) {
+                if (!clump.alerted) {
+                    const d = Math.hypot(clump.x - scout.x, clump.z - scout.z);
+                    if (d < nearestDist) {
+                        nearestDist = d;
+                        nearestClump = clump;
+                    }
+                }
+            }
+            
+            // Fire flare and alert the clump
+            events.push({ type: 'flare', scoutId: scout.id, x: scout.x, z: scout.z });
+            
+            if (nearestClump) {
+                nearestClump.alerted = true;
+                // Wake up all enemies in that clump
+                for (const enemy of state.enemies) {
+                    if (enemy.clumpId === nearestClump.id) {
+                        enemy.dormant = false;
+                    }
+                }
+            }
+        }
+        
+        // Roaming behavior (wander randomly)
+        scout.wanderTimer -= delta;
+        if (scout.wanderTimer <= 0) {
+            scout.wanderAngle += (random() - 0.5) * Math.PI;
+            scout.wanderTimer = 1 + random() * 2;
+        }
+        
+        // Move in wander direction (unless has fired, then chase)
+        if (scout.hasFired) {
+            // After firing, scout chases like normal enemy
+            const dx = state.car.x - scout.x;
+            const dz = state.car.z - scout.z;
+            const dist = Math.hypot(dx, dz);
+            if (dist > 0) {
+                scout.x += (dx / dist) * scout.speed * delta;
+                scout.z += (dz / dist) * scout.speed * delta;
+            }
+        } else {
+            // Wander
+            scout.x += Math.sin(scout.wanderAngle) * scout.speed * 0.5 * delta;
+            scout.z += Math.cos(scout.wanderAngle) * scout.speed * 0.5 * delta;
+            
+            // Keep scouts in bounds
+            scout.x = Math.max(-45, Math.min(45, scout.x));
+        }
+        
+        scout.vx = (scout.x - prevX) / delta;
+        scout.vz = (scout.z - prevZ) / delta;
+    }
+}
+
 function updateEnemies(state, delta) {
     for (const enemy of state.enemies) {
+        // Skip dormant enemies - they don't move until alerted
+        if (enemy.dormant) {
+            // Check if player gets within lure distance
+            const distToCar = Math.hypot(enemy.x - state.car.x, enemy.z - state.car.z);
+            if (distToCar < LURE_DISTANCE) {
+                enemy.dormant = false;
+                // Also alert the whole clump
+                if (enemy.clumpId !== null) {
+                    const clump = state.clumps.find(c => c.id === enemy.clumpId);
+                    if (clump && !clump.alerted) {
+                        clump.alerted = true;
+                        for (const e of state.enemies) {
+                            if (e.clumpId === clump.id) {
+                                e.dormant = false;
+                            }
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        
         const prevX = enemy.x;
         const prevZ = enemy.z;
         
@@ -542,12 +748,17 @@ if (typeof module !== 'undefined' && module.exports) {
         createRNG,
         createInitialState,
         spawnEnemy,
+        spawnClump,
+        spawnScout,
         updateGame,
         applyInputs,
         HAZARDS,
         GOAL_Z,
         START_Z,
         ENEMY_DETECTION_RANGE,
+        LURE_DISTANCE,
+        SCOUT_DETECTION_RANGE,
+        AMBUSH_POINTS,
         DEFAULT_CONFIG
     };
 }
@@ -558,12 +769,17 @@ if (typeof window !== 'undefined') {
         createRNG,
         createInitialState,
         spawnEnemy,
+        spawnClump,
+        spawnScout,
         updateGame,
         applyInputs,
         HAZARDS,
         GOAL_Z,
         START_Z,
         ENEMY_DETECTION_RANGE,
+        LURE_DISTANCE,
+        SCOUT_DETECTION_RANGE,
+        AMBUSH_POINTS,
         DEFAULT_CONFIG
     };
 }

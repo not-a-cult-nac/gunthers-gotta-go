@@ -744,6 +744,16 @@ io.on('connection', (socket) => {
         if (result) io.to(currentRoom.code).emit('enemyHit', result);
     });
     
+    socket.on('enemyHit', (data) => {
+        // Handle roadkill (jeep hitting enemies)
+        if (!currentRoom || !data.id) return;
+        const idx = currentRoom.enemies.findIndex(e => e.id === data.id);
+        if (idx !== -1) {
+            currentRoom.enemies.splice(idx, 1);
+            io.to(currentRoom.code).emit('enemyHit', { id: data.id, killed: true, type: 'roadkill' });
+        }
+    });
+    
     socket.on('debugConfig', (config) => {
         if (!currentRoom) return;
         currentRoom.updateConfig(config);

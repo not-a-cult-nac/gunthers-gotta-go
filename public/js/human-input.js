@@ -97,6 +97,11 @@ const HumanInput = {
             GameInput.triggerAction('jump');
         }
         
+        // Shift for boost
+        if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) {
+            GameInput.triggerAction('boost');
+        }
+        
         // Right-click for grab/toss
         if (this.pendingGrab) {
             GameInput.triggerAction('holdHand');

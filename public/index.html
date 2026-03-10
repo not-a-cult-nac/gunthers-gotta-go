@@ -85,6 +85,43 @@
         #gunther-arrow .arrow { font-size: 28px; display: none; }
         #gunther-arrow .distance { font-size: 22px; color: #fff; font-weight: bold; }
         
+        /* Boost bar */
+        #boost-bar-container {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 20px;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+        }
+        #boost-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #00aaff, #00ffff);
+            width: 100%;
+            transition: width 0.1s;
+        }
+        #boost-bar.boosting {
+            background: linear-gradient(90deg, #ff6600, #ffaa00);
+        }
+        #boost-bar.ready {
+            background: linear-gradient(90deg, #00ff00, #88ff00);
+        }
+        #boost-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px #000;
+        }
+        
         #end-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: none; flex-direction: column; justify-content: center; align-items: center;
@@ -211,6 +248,10 @@
         <div class="arrow">⬆</div>
         <div>GUNTHER</div>
         <div class="distance">0m</div>
+    </div>
+    <div id="boost-bar-container">
+        <div id="boost-bar"></div>
+        <div id="boost-text">BOOST READY</div>
     </div>
     
     <div id="debug-panel">
@@ -505,6 +546,13 @@
         let lastHoldHandTime = 0; // Cooldown for hold/release to prevent flickering
         let lastEnterExitTime = 0; // Cooldown for enter/exit to prevent flickering
         let lastShootTime = 0; // Cooldown for shooting
+        
+        // Boost state
+        let boostActive = false;
+        let boostEndTime = 0;
+        let boostCooldownEnd = 0;
+        const BOOST_DURATION = 3000;  // 3 seconds
+        const BOOST_COOLDOWN = 5000;  // 5 seconds
         let grabRangeRing; // Visual indicator for grab range
         let goalArrow3D, guntherArrow3D, guntherDistLabel; // 3D HUD arrows
         let gunViewModel; // First person gun model
@@ -1366,7 +1414,7 @@
             
             // Goal arrow - always visible, above view
             const goalArrowPos = basePos.clone();
-            goalArrowPos.y += 0.6;
+            goalArrowPos.y += 0.8;
             goalArrow3D.position.copy(goalArrowPos);
             
             // Calculate direction to goal from camera
@@ -1386,7 +1434,7 @@
             
             if (guntherVisible && serverState) {
                 const guntherArrowPos = basePos.clone();
-                guntherArrowPos.y += 0.35;
+                guntherArrowPos.y += 0.55;
                 guntherArrow3D.position.copy(guntherArrowPos);
                 
                 const toGunther = new THREE.Vector3(
@@ -1416,6 +1464,74 @@
             // Hide HTML goal arrow (using 3D now)
             const htmlGoal = document.getElementById('goal-arrow');
             if (htmlGoal) htmlGoal.style.display = 'none';
+        }
+        
+        function updateBoostBar(now) {
+            const container = document.getElementById('boost-bar-container');
+            const bar = document.getElementById('boost-bar');
+            const text = document.getElementById('boost-text');
+            if (!container || !bar || !text) return;
+            
+            container.style.display = isInCar ? 'block' : 'none';
+            if (!isInCar) return;
+            
+            if (boostActive) {
+                // Boosting - show remaining boost time
+                const remaining = Math.max(0, boostEndTime - now);
+                const percent = (remaining / BOOST_DURATION) * 100;
+                bar.style.width = percent + '%';
+                bar.className = 'boosting';
+                text.textContent = 'BOOSTING!';
+            } else if (now < boostCooldownEnd) {
+                // Cooling down
+                const cooldownRemaining = boostCooldownEnd - now;
+                const percent = ((BOOST_COOLDOWN - cooldownRemaining) / BOOST_COOLDOWN) * 100;
+                bar.style.width = percent + '%';
+                bar.className = '';
+                text.textContent = 'RECHARGING...';
+            } else {
+                // Ready
+                bar.style.width = '100%';
+                bar.className = 'ready';
+                text.textContent = 'BOOST READY [SHIFT]';
+            }
+        }
+        
+        function createBloodExplosion(x, y, z) {
+            const particleCount = 20;
+            const particles = [];
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.15 + Math.random() * 0.2),
+                    new THREE.MeshBasicMaterial({ color: 0x880000 })
+                );
+                particle.position.set(x, y + 1, z);
+                particle.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * 8,
+                    Math.random() * 6 + 2,
+                    (Math.random() - 0.5) * 8
+                );
+                scene.add(particle);
+                particles.push(particle);
+            }
+            
+            // Animate particles
+            let frame = 0;
+            const animateBlood = () => {
+                frame++;
+                for (const p of particles) {
+                    p.velocity.y -= 0.3; // gravity
+                    p.position.add(p.velocity.clone().multiplyScalar(0.05));
+                    p.scale.multiplyScalar(0.96);
+                }
+                if (frame < 60) {
+                    requestAnimationFrame(animateBlood);
+                } else {
+                    for (const p of particles) scene.remove(p);
+                }
+            };
+            animateBlood();
         }
         
         function updateGrabRangeRing() {
@@ -2079,8 +2195,23 @@
             if (isInCar) {
                 // Only the driver can control the car
                 if (isDriver) {
-                    const driveSpeed = 12 * delta;
+                    // Handle boost
+                    const now = Date.now();
+                    if (GameInput.consumeAction('boost') && !boostActive && now >= boostCooldownEnd) {
+                        boostActive = true;
+                        boostEndTime = now + BOOST_DURATION;
+                        boostCooldownEnd = boostEndTime + BOOST_COOLDOWN;
+                    }
+                    if (boostActive && now >= boostEndTime) {
+                        boostActive = false;
+                    }
+                    
+                    const boostMultiplier = boostActive ? 1.5 : 1.0;
+                    const driveSpeed = 12 * delta * boostMultiplier;
                     const turnSpeed = 2 * delta;
+                    
+                    // Update boost bar UI
+                    updateBoostBar(now);
                     
                     if (GameInput.moveSide < 0) carRotation += turnSpeed;
                     if (GameInput.moveSide > 0) carRotation -= turnSpeed;
@@ -2102,6 +2233,19 @@
                     car.rotation.y = carRotation;
                     
                     socket.emit('carUpdate', { x: car.position.x, z: car.position.z, rotation: carRotation });
+                    
+                    // Check for enemy collision (run them over!)
+                    if (serverState && serverState.enemies) {
+                        for (const e of serverState.enemies) {
+                            const dist = Math.hypot(car.position.x - e.x, car.position.z - e.z);
+                            if (dist < 3) {
+                                // Hit enemy with jeep!
+                                createBloodExplosion(e.x, getTerrainHeight(e.x, e.z), e.z);
+                                socket.emit('enemyHit', { id: e.id, type: 'roadkill' });
+                                SFX.enemyDeath();
+                            }
+                        }
+                    }
                 }
                 
                 // Camera (everyone in car sees same view)

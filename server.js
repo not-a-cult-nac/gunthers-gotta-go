@@ -82,7 +82,7 @@ class GameRoom {
         this.players = new Map();
         this.driver = null;
         this.car = { x: 0, z: START_Z, rotation: 0 };
-        this.gunther = { x: 0, z: START_Z, state: 'in_car', visible: false, captorId: null, trapPos: null, holderId: null, strain: 0 };
+        this.gunther = { x: 0, z: START_Z, state: 'in_car', visible: false, captorId: null, trapPos: null, holderId: null };
         this.enemies = [];
         this.gameState = 'waiting';
         this.lastUpdate = Date.now();
@@ -160,113 +160,30 @@ class GameRoom {
             }
         }
         
-        // Gunther holding hands with a player
-        if (this.gunther.state === 'holding_hands' && this.gunther.holderId !== null) {
-            const holder = this.players.get(this.gunther.holderId);
-            if (!holder || holder.inCar) {
-                // Holder left or entered car, release
+        // Gunther being carried by a player (above their head)
+        if (this.gunther.state === 'carried' && this.gunther.holderId !== null) {
+            const carrier = this.players.get(this.gunther.holderId);
+            if (!carrier || carrier.inCar) {
+                // Carrier left or entered car, drop Gunther
                 this.gunther.state = 'wandering';
                 this.gunther.holderId = null;
-                this.gunther.strain = 0;
-                this.lastQuote = "FREEDOM! Now vhere vas zat lava pit?";
+                this.lastQuote = "Wheee— wait, where did you go?";
             } else {
-                // Find what Gunther wants to run toward
-                let nearestHazard = null;
-                let nearestDist = Infinity;
-                let pullStrength = 0;
+                // Gunther follows directly above carrier - no escape while carried!
+                this.gunther.x = carrier.x;
+                this.gunther.z = carrier.z;
+                this.gunther.visible = true;
                 
-                for (const h of HAZARDS) {
-                    const d = Math.hypot(this.gunther.x - h.x, this.gunther.z - h.z);
-                    if (d < nearestDist) {
-                        nearestDist = d;
-                        nearestHazard = h;
-                    }
-                }
-                
-                for (const e of this.enemies) {
-                    const d = Math.hypot(this.gunther.x - e.x, this.gunther.z - e.z);
-                    if (d < nearestDist * 0.6) {
-                        nearestDist = d;
-                        nearestHazard = { x: e.x, z: e.z, type: 'candy' };
-                    }
-                }
-                
-                // Calculate strain based on proximity to temptation
-                if (nearestHazard) {
-                    pullStrength = Math.max(0, 100 - nearestDist * 2);
-                    if (nearestHazard.type === 'candy') pullStrength *= 1.5;
-                }
-                
-                // Enemies nearby increase strain
-                for (const e of this.enemies) {
-                    const d = Math.hypot(this.gunther.x - e.x, this.gunther.z - e.z);
-                    if (d < 8) {
-                        pullStrength += (8 - d) * 3;
-                    }
-                }
-                
-                // Follow holder with resistance
-                const toHolder = {
-                    x: holder.x - this.gunther.x,
-                    z: holder.z - this.gunther.z
-                };
-                const followDist = Math.hypot(toHolder.x, toHolder.z);
-                
-                if (followDist > 2) {
-                    const norm = Math.hypot(toHolder.x, toHolder.z);
-                    const followSpeed = Math.min(6, followDist) * delta;
-                    this.gunther.x += (toHolder.x / norm) * followSpeed;
-                    this.gunther.z += (toHolder.z / norm) * followSpeed;
-                    
-                    // Also pull toward hazard based on strain
-                    if (nearestHazard && pullStrength > 20) {
-                        const toHazard = {
-                            x: nearestHazard.x - this.gunther.x,
-                            z: nearestHazard.z - this.gunther.z
-                        };
-                        const hazardDist = Math.hypot(toHazard.x, toHazard.z);
-                        if (hazardDist > 0) {
-                            this.gunther.x += (toHazard.x / hazardDist) * pullStrength * 0.01 * delta;
-                            this.gunther.z += (toHazard.z / hazardDist) * pullStrength * 0.01 * delta;
-                        }
-                    }
-                }
-                
-                // Keep arm's length
-                if (followDist < 1.5 && followDist > 0) {
-                    const norm = Math.hypot(toHolder.x, toHolder.z);
-                    this.gunther.x = holder.x - (toHolder.x / norm) * 1.5;
-                    this.gunther.z = holder.z - (toHolder.z / norm) * 1.5;
-                }
-                
-                // Update strain
-                this.gunther.strain = Math.min(100, this.gunther.strain + pullStrength * 0.3 * delta);
-                this.gunther.strain = Math.max(0, this.gunther.strain - 10 * delta);
-                
-                // Random struggle quotes
-                if (this.gunther.strain > 70 && Math.random() < 0.02) {
-                    this.lastQuote = holdingHandsQuotes[Math.floor(Math.random() * holdingHandsQuotes.length)];
-                }
-                
-                // Break free if strain too high!
-                if (this.gunther.strain >= 100) {
-                    this.gunther.state = 'wandering';
-                    this.gunther.holderId = null;
-                    this.gunther.strain = 0;
-                    this.lastQuote = "HAHA! You cannot hold GUNTHER!";
-                    
-                    // Sprint toward danger
-                    if (nearestHazard) {
-                        const toHazard = {
-                            x: nearestHazard.x - this.gunther.x,
-                            z: nearestHazard.z - this.gunther.z
-                        };
-                        const hazardDist = Math.hypot(toHazard.x, toHazard.z);
-                        if (hazardDist > 0) {
-                            this.gunther.x += (toHazard.x / hazardDist) * 3;
-                            this.gunther.z += (toHazard.z / hazardDist) * 3;
-                        }
-                    }
+                // Occasional happy quotes
+                if (Math.random() < 0.005) {
+                    const carryQuotes = [
+                        "I can see my house from here!",
+                        "Wheee! Zis is fun!",
+                        "I am ze tallest German boy!",
+                        "Look at me, I am flying!",
+                        "Higher! HIGHER!"
+                    ];
+                    this.lastQuote = carryQuotes[Math.floor(Math.random() * carryQuotes.length)];
                 }
             }
         }
@@ -361,7 +278,7 @@ class GameRoom {
         
         for (const enemy of this.enemies) {
             const guntherVulnerable = this.gunther.state === 'wandering' || this.gunther.state === 'trapped';
-            const guntherHeld = this.gunther.state === 'holding_hands';
+            const guntherCarried = this.gunther.state === 'carried';  // Can't grab when carried!
             
             // Check if enemy is close enough to the car to be "active"
             const distToCar = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
@@ -371,7 +288,8 @@ class GameRoom {
             enemy.vx = 0;
             enemy.vz = 0;
             
-            if ((guntherVulnerable || guntherHeld) && !enemy.hasGunther && inRange) {
+            // Enemies chase Gunther only if he's vulnerable (not carried or in car)
+            if (guntherVulnerable && !enemy.hasGunther && inRange) {
                 const dx = this.gunther.x - enemy.x;
                 const dz = this.gunther.z - enemy.z;
                 const dist = Math.hypot(dx, dz);
@@ -383,15 +301,14 @@ class GameRoom {
                     enemy.z += enemy.vz * delta;
                 }
                 
-                // Can only capture if NOT holding hands
-                if (dist < 2 && !guntherHeld) {
+                // Capture Gunther if close enough
+                if (dist < 2) {
                     enemy.hasGunther = true;
                     this.gunther.state = 'captured';
                     this.gunther.captorId = enemy.id;
-                    this.gunther.visible = true;  // Stay visible - enemy is holding his hand!
+                    this.gunther.visible = true;
                     this.gunther.trapPos = null;
                     this.gunther.holderId = null;
-                    this.gunther.strain = 0;
                     this.lastQuote = "Ooh! You have ze candies? I come viz you!";
                 }
             } else if (!enemy.hasGunther) {
@@ -438,23 +355,22 @@ class GameRoom {
         const player = this.players.get(playerId);
         if (!player || player.inCar) return false;
         
-        if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped' || this.gunther.state === 'holding_hands') {
+        if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped' || this.gunther.state === 'carried') {
             const dist = Math.hypot(player.x - this.gunther.x, player.z - this.gunther.z);
-            // If holding hands, we can put him in car from further away
-            const grabDist = this.gunther.state === 'holding_hands' ? 6 : 4;
+            // If carried, we can put him in car from further away
+            const grabDist = this.gunther.state === 'carried' ? 6 : 4;
             if (dist < grabDist) {
                 // Must be close to car too
                 const carDist = Math.hypot(player.x - this.car.x, player.z - this.car.z);
                 if (carDist < 8) {
                     const wasTrapped = this.gunther.state === 'trapped';
-                    const wasHolding = this.gunther.state === 'holding_hands';
+                    const wasCarried = this.gunther.state === 'carried';
                     this.gunther.state = 'in_car';
                     this.gunther.visible = false;
                     this.gunther.trapPos = null;
                     this.gunther.holderId = null;
-                    this.gunther.strain = 0;
                     this.lastQuote = wasTrapped ? "Ach! You freed me from ze fun snappy thing!" : 
-                                     wasHolding ? "NEIN! Not ze boring car again!" :
+                                     wasCarried ? "Zank you for ze ride! But I vas having fun up zere!" :
                                      "Nein! Ze adventure vas just beginning!";
                     // Check win immediately when Gunther enters car
                     const goalDist = Math.hypot(this.car.x, this.car.z - GOAL_Z);
@@ -468,31 +384,51 @@ class GameRoom {
         return false;
     }
     
-    holdHand(playerId) {
+    grabGunther(playerId) {
         const player = this.players.get(playerId);
         if (!player || player.inCar) return false;
         
         if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped') {
             const dist = Math.hypot(player.x - this.gunther.x, player.z - this.gunther.z);
             if (dist < 4) {
-                this.gunther.state = 'holding_hands';
+                this.gunther.state = 'carried';
                 this.gunther.holderId = playerId;
-                this.gunther.strain = 0;
                 this.gunther.trapPos = null;
-                this.lastQuote = "Ach! You are holding my hand! But I vant to EXPLORE!";
+                this.lastQuote = "Wheee! I am flying! Like a beautiful German eagle!";
                 return true;
             }
         }
         return false;
     }
     
-    releaseHand(playerId) {
-        if (this.gunther.state === 'holding_hands' && this.gunther.holderId === playerId) {
+    tossGunther(playerId, dirX, dirZ) {
+        if (this.gunther.state === 'carried' && this.gunther.holderId === playerId) {
+            const player = this.players.get(playerId);
+            if (!player) return false;
+            
+            // Toss Gunther in the direction player is facing
+            const tossDistance = 8;
+            const targetX = player.x + dirX * tossDistance;
+            const targetZ = player.z + dirZ * tossDistance;
+            
+            // Check if tossed near jeep - if so, put him in car
+            const distToCar = Math.hypot(targetX - this.car.x, targetZ - this.car.z);
+            if (distToCar < 6) {
+                this.gunther.state = 'in_car';
+                this.gunther.visible = false;
+                this.gunther.holderId = null;
+                this.lastQuote = "Back in ze comfy car! Zank you for ze flight!";
+                return { landed: 'car' };
+            }
+            
+            // Otherwise he lands and starts wandering
+            this.gunther.x = targetX;
+            this.gunther.z = targetZ;
             this.gunther.state = 'wandering';
+            this.gunther.visible = true;
             this.gunther.holderId = null;
-            this.gunther.strain = 0;
-            this.lastQuote = "FREEDOM! Now vhere vas zat lava pit?";
-            return true;
+            this.lastQuote = "Wheeee— OOF! Zat vas fun! Again, again!";
+            return { landed: 'ground', x: targetX, z: targetZ };
         }
         return false;
     }
@@ -772,12 +708,11 @@ io.on('connection', (socket) => {
                     }
                 }
                 
-                // If holding Gunther's hand, bring him into the car!
-                if (currentRoom.gunther.state === 'holding_hands' && currentRoom.gunther.holderId === socket.id) {
+                // If carrying Gunther, bring him into the car!
+                if (currentRoom.gunther.state === 'carried' && currentRoom.gunther.holderId === socket.id) {
                     currentRoom.gunther.state = 'in_car';
                     currentRoom.gunther.visible = false;
                     currentRoom.gunther.holderId = null;
-                    currentRoom.gunther.strain = 0;
                     // Check win immediately when Gunther enters car
                     const goalDist = Math.hypot(currentRoom.car.x, currentRoom.car.z - GOAL_Z);
                     currentRoom.lastQuote = `DEBUG: car.z=${currentRoom.car.z.toFixed(0)}, goalDist=${goalDist.toFixed(0)}`;
@@ -793,12 +728,8 @@ io.on('connection', (socket) => {
         if (currentRoom) currentRoom.grabGunther(socket.id);
     });
     
-    socket.on('holdHand', () => {
-        if (currentRoom) currentRoom.holdHand(socket.id);
-    });
-    
-    socket.on('releaseHand', () => {
-        if (currentRoom) currentRoom.releaseHand(socket.id);
+    socket.on('tossGunther', (data) => {
+        if (currentRoom) currentRoom.tossGunther(socket.id, data.dirX, data.dirZ);
     });
     
     socket.on('shoot', (data) => {

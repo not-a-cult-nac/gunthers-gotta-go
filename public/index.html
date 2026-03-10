@@ -268,23 +268,13 @@
                     width: 70px; height: 70px; border-radius: 50%;
                     background: #2ecc71; border: 3px solid #fff;
                     color: #fff; font-size: 11px; font-weight: bold;
-                ">🖐️<br>HOLD</button>
+                ">🤚<br>GRAB</button>
             </div>
         </div>
     </div>
     
-    <div id="strain-meter" style="
-        position: absolute;
-        bottom: 60px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 300px;
-        height: 30px;
-        background: rgba(0,0,0,0.7);
-        border-radius: 15px;
-        overflow: hidden;
-        display: none;
-    ">
+    <!-- Strain meter removed - carry mechanic doesn't use it -->
+    <div id="strain-meter" style="display: none !important;">
         <div id="strain-label" style="
             position: absolute;
             width: 100%;
@@ -830,7 +820,7 @@
             
             // Update hold button text based on state
             setInterval(() => {
-                btnHold.textContent = guntherHoldingHands ? '✋ RELEASE' : '🖐️ HOLD HAND';
+                btnHold.textContent = guntherHoldingHands ? '🚀 TOSS' : '🤚 GRAB';
                 btnHold.style.background = guntherHoldingHands ? '#e67e22' : '#9b59b6';
                 btnAction.innerHTML = isInCar ? 'E<br>EXIT' : 'E<br>ENTER';
             }, 200);
@@ -1253,7 +1243,7 @@
             const guntherGrabbable = serverState && 
                 (serverState.gunther.state === 'wandering' || 
                  serverState.gunther.state === 'trapped' ||
-                 serverState.gunther.state === 'holding_hands');
+                 serverState.gunther.state === 'carried');
             
             if (!isInCar && guntherGrabbable) {
                 grabRangeRing.visible = true;
@@ -1283,7 +1273,8 @@
         function updateHandLink() {
             if (!handLinkGroup || !player || !gunther) return;
             
-            if (guntherHoldingHands && player.visible && gunther.visible) {
+            // Hand link disabled - carrying mechanic shows Gunther above head instead
+            if (false && guntherHoldingHands && player.visible && gunther.visible) {
                 handLinkGroup.visible = true;
                 
                 // Get positions
@@ -1514,6 +1505,17 @@
                     seatPos.add(car.position);
                     gunther.position.copy(seatPos);
                     gunther.rotation.y = carRotation;
+                } else if (state.gunther.state === 'carried') {
+                    // Carried above player's head
+                    gunther.visible = true;
+                    const targetX = state.gunther.x;
+                    const targetZ = state.gunther.z;
+                    const targetY = getTerrainHeight(targetX, targetZ) + 2.5; // Above player's head!
+                    // Smooth interpolation
+                    gunther.position.x += (targetX - gunther.position.x) * 0.5;
+                    gunther.position.z += (targetZ - gunther.position.z) * 0.5;
+                    gunther.position.y += (targetY - gunther.position.y) * 0.5;
+                    gunther.rotation.y += 0.05; // Spin for fun!
                 } else {
                     // Not in car - use server position with smoothing
                     gunther.visible = state.gunther.visible;
@@ -1536,14 +1538,14 @@
                 // Play sounds on Gunther state changes
                 const newState = state.gunther.state;
                 if (newState !== lastGuntherState) {
-                    if (newState === 'in_car' && (lastGuntherState === 'wandering' || lastGuntherState === 'holding_hands')) {
+                    if (newState === 'in_car' && (lastGuntherState === 'wandering' || lastGuntherState === 'carried')) {
                         SFX.guntherRescue(); // Gunther got back in car!
                     } else if ((newState === 'wandering' || newState === 'captured' || newState === 'trapped') && lastGuntherState === 'in_car') {
                         SFX.guntherEscape(); // Gunther escaped!
                     }
                     lastGuntherState = newState;
                 }
-                guntherHoldingHands = newState === 'holding_hands';
+                guntherHoldingHands = newState === 'carried';  // Renamed but keeping variable for compatibility
                 updateHandLink();
                 updateGrabRangeRing();
                 
@@ -1557,9 +1559,9 @@
                 } else if (state.gunther.state === 'trapped') {
                     statusText = '🪤 TRAPPED!';
                     statusColor = '#ff8844';
-                } else if (state.gunther.state === 'holding_hands') {
-                    statusText = state.gunther.strain > 60 ? '🖐️ HOLDING (STRUGGLING!)' : '🖐️ HOLDING HANDS';
-                    statusColor = state.gunther.strain > 60 ? '#ffaa00' : '#88ffff';
+                } else if (state.gunther.state === 'carried') {
+                    statusText = '🏋️ CARRYING';
+                    statusColor = '#88ffff';
                 } else {
                     statusText = '⚠️ WANDERING';
                     statusColor = '#ff4444';
@@ -1567,15 +1569,7 @@
                 document.getElementById('gunther-status').textContent = statusText;
                 document.getElementById('gunther-status').style.color = statusColor;
                 
-                // Update strain meter
-                const strainMeter = document.getElementById('strain-meter');
-                const strainBar = document.getElementById('strain-bar');
-                if (state.gunther.state === 'holding_hands') {
-                    strainMeter.style.display = 'block';
-                    strainBar.style.width = (state.gunther.strain || 0) + '%';
-                } else {
-                    strainMeter.style.display = 'none';
-                }
+                // Strain meter removed - carry mechanic is simpler
             }
             
             // Enemies
@@ -1899,20 +1893,23 @@
                 }
             }
             
-            // SPACE to hold/release Gunther's hand (use GameInput)
-            // 500ms cooldown to prevent flickering from rapid presses
+            // SPACE to grab/toss Gunther (use GameInput)
+            // 500ms cooldown to prevent rapid toggling
             const now = Date.now();
             if (GameInput.consumeAction('holdHand') && !isInCar && (now - lastHoldHandTime > 500)) {
                 lastHoldHandTime = now;
                 if (guntherHoldingHands) {
-                    socket.emit('releaseHand');
+                    // Toss Gunther in the direction we're facing
+                    const dirX = Math.sin(playerRotation);
+                    const dirZ = Math.cos(playerRotation);
+                    socket.emit('tossGunther', { dirX, dirZ });
                 } else {
-                    socket.emit('holdHand');
+                    socket.emit('grabGunther');
                 }
             }
             
-            // Shooting (use GameInput) - ON FOOT ONLY!
-            if (GameInput.consumeAction('shoot') && !isInCar) {
+            // Shooting (use GameInput) - ON FOOT ONLY, and NOT while carrying Gunther!
+            if (GameInput.consumeAction('shoot') && !isInCar && !guntherHoldingHands) {
                 let dirX, dirZ;
                 // AI can specify custom shoot direction
                 if (GameInput.shootDirection) {

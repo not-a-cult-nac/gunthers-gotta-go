@@ -117,8 +117,8 @@ class GameRoom {
         const baseSpeed = this.config.enemySpeed;
         // 40% chance to spawn a killer, 60% stealer
         const type = Math.random() < 0.4 ? 'killer' : 'stealer';
-        // Stealers are now faster (1.5x), killers even faster (1.8x)
-        const speedMult = type === 'killer' ? 1.8 : 1.5;
+        // Stealers (1.35x), killers faster (1.6x) - 10% slower than before
+        const speedMult = type === 'killer' ? 1.6 : 1.35;
         const enemy = {
             id: this.enemyIdCounter++,
             type: type,
@@ -128,7 +128,7 @@ class GameRoom {
             vz: 0,
             health: 2,
             hasGunther: false,
-            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.5  // 50% faster overall
+            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.35  // 10% slower than before
         };
         this.enemies.push(enemy);
         return enemy;
@@ -246,8 +246,10 @@ class GameRoom {
                 const dz = captor.z - this.car.z;
                 const dist = Math.hypot(dx, dz);
                 if (dist > 0) {
-                    captor.x += (dx / dist) * captor.speed * delta;
-                    captor.z += (dz / dist) * captor.speed * delta;
+                    // Move slower when dragging Gunther - he has little legs!
+                    const guntherSlowdown = 0.5; // 50% slower with Gunther
+                    captor.x += (dx / dist) * captor.speed * guntherSlowdown * delta;
+                    captor.z += (dz / dist) * captor.speed * guntherSlowdown * delta;
                 }
                 // Gunther walks slightly behind/beside the captor
                 this.gunther.x = captor.x + 1;

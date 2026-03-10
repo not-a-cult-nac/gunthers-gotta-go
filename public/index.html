@@ -1506,16 +1506,17 @@
                     gunther.position.copy(seatPos);
                     gunther.rotation.y = carRotation;
                 } else if (state.gunther.state === 'carried') {
-                    // Carried above player's head
+                    // Carried above player's head - positioned so feet visible at top of frame
                     gunther.visible = true;
                     const targetX = state.gunther.x;
                     const targetZ = state.gunther.z;
-                    const targetY = getTerrainHeight(targetX, targetZ) + 2.5; // Above player's head!
+                    const targetY = getTerrainHeight(targetX, targetZ) + 3.2; // High enough to see feet at top of FOV
                     // Smooth interpolation
                     gunther.position.x += (targetX - gunther.position.x) * 0.5;
                     gunther.position.z += (targetZ - gunther.position.z) * 0.5;
                     gunther.position.y += (targetY - gunther.position.y) * 0.5;
-                    gunther.rotation.y += 0.05; // Spin for fun!
+                    // Little wobble instead of full spin
+                    gunther.rotation.y = Math.sin(Date.now() * 0.003) * 0.3;
                 } else {
                     // Not in car - use server position with smoothing
                     gunther.visible = state.gunther.visible;
@@ -1852,21 +1853,28 @@
                 
                 // First person camera - at head height, looking forward
                 camera.position.set(player.position.x, player.position.y + 1.7, player.position.z);
+                
+                // When carrying Gunther, look slightly up so you can see him
+                const lookUpOffset = guntherHoldingHands ? 1.5 : 0;
                 const lookTarget = new THREE.Vector3(
                     player.position.x + forward.x * 10,
-                    player.position.y + 1.7,
+                    player.position.y + 1.7 + lookUpOffset,
                     player.position.z + forward.z * 10
                 );
                 camera.lookAt(lookTarget);
                 
-                // Update gun viewmodel position (follows camera)
+                // Update gun viewmodel - hide when carrying Gunther
                 if (gunViewModel) {
-                    gunViewModel.visible = true;
-                    gunViewModel.position.copy(camera.position);
-                    gunViewModel.position.x += forward.x * 0.5 + right.x * 0.3;
-                    gunViewModel.position.z += forward.z * 0.5 + right.z * 0.3;
-                    gunViewModel.position.y -= 0.3;
-                    gunViewModel.rotation.y = playerRotation;
+                    if (guntherHoldingHands) {
+                        gunViewModel.visible = false;  // Hands full!
+                    } else {
+                        gunViewModel.visible = true;
+                        gunViewModel.position.copy(camera.position);
+                        gunViewModel.position.x += forward.x * 0.5 + right.x * 0.3;
+                        gunViewModel.position.z += forward.z * 0.5 + right.z * 0.3;
+                        gunViewModel.position.y -= 0.3;
+                        gunViewModel.rotation.y = playerRotation;
+                    }
                 }
             }
             

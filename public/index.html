@@ -552,6 +552,7 @@
         let boostActive = false;
         let boostEndTime = 0;
         let boostCooldownEnd = 0;
+        let lastExitCarTime = 0; // Track when player left jeep
         const BOOST_DURATION = 3000;  // 3 seconds
         const BOOST_COOLDOWN = 5000;  // 5 seconds
         let grabRangeRing; // Visual indicator for grab range
@@ -572,6 +573,7 @@
         let mouseX = 0, mouseY = 0;
         let carRotation = 0;
         let playerRotation = 0;
+        let cameraPitch = 0; // Vertical look angle
         let playerVelocityY = 0;  // For jumping
         let isOnGround = true;
         let lastQuote = '';
@@ -785,13 +787,28 @@
             if (data.killed) killedEnemyIds.add(data.id);
             const mesh = enemyMeshes.get(data.id);
             if (mesh) {
+                // Flash red
                 mesh.children.forEach(c => {
                     if (c.material) {
                         const orig = c.material.color.getHex();
                         c.material.color.setHex(0xff0000);
-                        setTimeout(() => { if (c.material) c.material.color.setHex(orig); }, 100);
+                        setTimeout(() => { if (c.material) c.material.color.setHex(orig); }, 150);
                     }
                 });
+                // Knockback/stagger effect
+                const origY = mesh.position.y;
+                mesh.position.y += 0.5;
+                mesh.rotation.x = 0.3;
+                setTimeout(() => {
+                    if (mesh) {
+                        mesh.position.y = origY;
+                        mesh.rotation.x = 0;
+                    }
+                }, 150);
+                // Blood splatter particles
+                if (data.killed) {
+                    createBloodExplosion(mesh.position.x, mesh.position.y, mesh.position.z);
+                }
             }
         });
         
@@ -1496,8 +1513,20 @@
             const text = document.getElementById('boost-text');
             if (!container || !bar || !text) return;
             
+            // Hide boost bar when outside jeep
             container.style.display = isInCar ? 'block' : 'none';
-            if (!isInCar) return;
+            
+            if (!isInCar) {
+                // Reset boost after 1 second outside jeep
+                if (lastExitCarTime > 0 && now - lastExitCarTime > 1000) {
+                    boostActive = false;
+                    boostCooldownEnd = 0;
+                }
+                return;
+            }
+            
+            // Clear exit time when in car
+            lastExitCarTime = 0;
             
             if (boostActive) {
                 // Boosting - show remaining boost time
@@ -2247,8 +2276,12 @@
                 });
             }
             
-            // Apply aim input to rotation
+            // Apply aim input to rotation (horizontal and vertical)
             mouseX += GameInput.aimX;
+            if (!isInCar) {
+                cameraPitch -= GameInput.aimY;
+                cameraPitch = Math.max(-1.2, Math.min(1.2, cameraPitch)); // Clamp vertical look
+            }
             
             if (isInCar) {
                 // Only the driver can control the car
@@ -2304,13 +2337,15 @@
                     
                     // Make jeep follow terrain - tilt based on slope
                     const rightDir = new THREE.Vector3(Math.cos(carRotation), 0, -Math.sin(carRotation));
-                    const frontY = getTerrainHeight(car.position.x + forward.x * 2, car.position.z + forward.z * 2);
-                    const backY = getTerrainHeight(car.position.x - forward.x * 2, car.position.z - forward.z * 2);
+                    const frontY = getTerrainHeight(car.position.x + forward.x * 2.5, car.position.z + forward.z * 2.5);
+                    const backY = getTerrainHeight(car.position.x - forward.x * 2.5, car.position.z - forward.z * 2.5);
                     const leftY = getTerrainHeight(car.position.x - rightDir.x * 1.5, car.position.z - rightDir.z * 1.5);
                     const rightY = getTerrainHeight(car.position.x + rightDir.x * 1.5, car.position.z + rightDir.z * 1.5);
                     
-                    const pitchAngle = Math.atan2(frontY - backY, 4) * 0.8;
-                    const rollAngle = Math.atan2(rightY - leftY, 3) * 0.8;
+                    // Pitch: nose down when going uphill (front higher than back)
+                    const pitchAngle = -Math.atan2(frontY - backY, 5) * 0.9;
+                    // Roll: tilt into slopes
+                    const rollAngle = -Math.atan2(rightY - leftY, 3) * 0.9;
                     
                     car.rotation.set(pitchAngle, carRotation, rollAngle);
                     
@@ -2395,10 +2430,13 @@
                 
                 // When carrying Gunther, look up more so you can see him at top of frame
                 const lookUpOffset = guntherHoldingHands ? 3.0 : 0;
+                // Apply vertical look (cameraPitch) to look target
+                const verticalOffset = Math.sin(cameraPitch) * 10 + lookUpOffset;
+                const horizontalDist = Math.cos(cameraPitch) * 10;
                 const lookTarget = new THREE.Vector3(
-                    player.position.x + forward.x * 10,
-                    player.position.y + 1.7 + lookUpOffset,
-                    player.position.z + forward.z * 10
+                    player.position.x + forward.x * horizontalDist,
+                    player.position.y + 1.7 + verticalOffset,
+                    player.position.z + forward.z * horizontalDist
                 );
                 camera.lookAt(lookTarget);
                 
@@ -2424,11 +2462,13 @@
                 lastEnterExitTime = enterExitNow;
                 if (isInCar) {
                     isInCar = false;
+                    lastExitCarTime = Date.now(); // Track when we left for boost reset
                     player.visible = true;
                     player.position.copy(car.position);
                     player.position.x += 4;
                     player.position.y = getTerrainHeight(player.position.x, player.position.z);
                     playerRotation = carRotation;
+                    cameraPitch = 0; // Reset vertical look
                     mouseX = -carRotation;
                     socket.emit('exitCar');
                     SFX.enterCar();
@@ -2473,18 +2513,22 @@
                     dirX = Math.sin(playerRotation);
                     dirZ = Math.cos(playerRotation);
                 }
-                socket.emit('shoot', { x: player.position.x, z: player.position.z, dirX, dirZ });
+                
+                // Gun muzzle position (offset from player towards right side)
+                const rightDir = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
+                const gunX = player.position.x + rightDir.x * 0.4 + dirX * 0.5;
+                const gunZ = player.position.z + rightDir.z * 0.4 + dirZ * 0.5;
+                const gunY = player.position.y + 1.0;
+                
+                socket.emit('shoot', { x: gunX, z: gunZ, dirX, dirZ });
                 SFX.shoot();
                 
-                // Tracer visual
+                // Tracer visual from gun muzzle
                 const tracer = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.03, 0.03, 40),
                     new THREE.MeshBasicMaterial({ color: 0xffff00 })
                 );
-                tracer.position.copy(player.position);
-                tracer.position.y += 1.2;
-                tracer.position.x += dirX * 20;
-                tracer.position.z += dirZ * 20;
+                tracer.position.set(gunX + dirX * 20, gunY, gunZ + dirZ * 20);
                 tracer.rotation.x = Math.PI / 2;
                 tracer.rotation.order = 'YXZ';
                 tracer.rotation.y = Math.atan2(dirX, dirZ);
@@ -2496,6 +2540,7 @@
             updateGrabRangeRing();
             updateHandLink();
             updateHUDArrows();
+            updateBoostBar(Date.now()); // Update boost bar (handles reset when outside car)
             
             // Reset input deltas
             if (typeof GameInput !== 'undefined') GameInput.resetDeltas();

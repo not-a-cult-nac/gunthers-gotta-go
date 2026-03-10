@@ -135,25 +135,14 @@ class GameRoom {
     update(delta) {
         if (this.gameState !== 'playing') return;
         
-        // Gunther escapes from car
+        // Gunther escapes from car (random only, not lured by enemies)
         if (this.gunther.state === 'in_car') {
             // Random escape - controlled by escapeRate
             if (Math.random() < this.config.escapeRate * delta) {
                 this.releaseGunther();
                 this.lastQuote = guntherQuotes[Math.floor(Math.random() * guntherQuotes.length)];
             }
-            
-            // Escapes toward nearby enemies (controlled by lureRange)
-            for (const enemy of this.enemies) {
-                const dist = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
-                if (dist < this.config.lureRange) {
-                    this.releaseGunther();
-                    this.gunther.x += (enemy.x - this.car.x) * 0.4;
-                    this.gunther.z += (enemy.z - this.car.z) * 0.4;
-                    this.lastQuote = "Ooh! Zat man has CANDY!";
-                    break;
-                }
-            }
+            // NOTE: Removed enemy lure behavior - Gunther no longer leaves when enemies are close
         }
         
         // Gunther being carried by a player (above their head)

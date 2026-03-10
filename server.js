@@ -852,7 +852,30 @@ class GameRoom {
             }
         }
         
-        if (closestEnemy) {
+        // Also check for scout hits
+        let closestScout = null;
+        let closestScoutDist = Infinity;
+        
+        for (const scout of this.scouts) {
+            const dx = scout.x - x;
+            const dz = scout.z - z;
+            const dist = Math.hypot(dx, dz);
+            
+            if (dist > 60 || dist < 1) continue;
+            
+            const dot = dx * dirX + dz * dirZ;
+            if (dot < 0) continue;
+            
+            const perpDist = Math.abs(dx * dirZ - dz * dirX);
+            
+            if (perpDist < 2.5 && dot < closestScoutDist) {
+                closestScoutDist = dot;
+                closestScout = scout;
+            }
+        }
+        
+        // Hit the closer target (enemy or scout)
+        if (closestEnemy && closestDist <= closestScoutDist) {
             closestEnemy.health--;
             
             if (closestEnemy.health <= 0) {
@@ -873,7 +896,16 @@ class GameRoom {
             }
             
             return { id: closestEnemy.id, killed: closestEnemy.health <= 0 };
+        } else if (closestScout) {
+            closestScout.health--;
+            
+            if (closestScout.health <= 0) {
+                this.scouts = this.scouts.filter(s => s !== closestScout);
+            }
+            
+            return { id: 'scout_' + closestScout.id, killed: closestScout.health <= 0, isScout: true };
         }
+        
         return null;
     }
     

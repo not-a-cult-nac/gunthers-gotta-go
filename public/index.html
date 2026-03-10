@@ -1307,25 +1307,28 @@
         
         function create3DArrow(color, scale = 1) {
             const arrow = new THREE.Group();
-            const mat = new THREE.MeshBasicMaterial({ color: color });
+            const mat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
             
-            // Arrow body (cone pointing forward)
-            const cone = new THREE.Mesh(
-                new THREE.ConeGeometry(0.08 * scale, 0.25 * scale, 8),
-                mat
-            );
-            cone.rotation.x = Math.PI / 2;
-            cone.position.z = 0.12 * scale;
-            arrow.add(cone);
+            // Flat chevron arrow shape
+            const shape = new THREE.Shape();
+            const s = scale * 0.3;
+            // Arrow pointing up (will be rotated)
+            shape.moveTo(0, s * 1.2);        // Tip
+            shape.lineTo(-s * 0.8, -s * 0.3); // Bottom left
+            shape.lineTo(-s * 0.3, 0);        // Inner left
+            shape.lineTo(0, -s * 0.5);        // Inner bottom
+            shape.lineTo(s * 0.3, 0);         // Inner right
+            shape.lineTo(s * 0.8, -s * 0.3);  // Bottom right
+            shape.lineTo(0, s * 1.2);         // Back to tip
             
-            // Arrow shaft
-            const shaft = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.03 * scale, 0.03 * scale, 0.15 * scale, 8),
-                mat
-            );
-            shaft.rotation.x = Math.PI / 2;
-            shaft.position.z = -0.05 * scale;
-            arrow.add(shaft);
+            const geometry = new THREE.ExtrudeGeometry(shape, {
+                depth: 0.02 * scale,
+                bevelEnabled: false
+            });
+            
+            const mesh = new THREE.Mesh(geometry, mat);
+            mesh.rotation.x = -Math.PI / 2; // Lay flat
+            arrow.add(mesh);
             
             return arrow;
         }
@@ -1360,9 +1363,9 @@
             const arrowDistance = 2;
             const basePos = camPos.clone().add(camDir.clone().multiplyScalar(arrowDistance));
             
-            // Goal arrow - always visible, top of view
+            // Goal arrow - always visible, high above view
             const goalArrowPos = basePos.clone();
-            goalArrowPos.y += 0.5;
+            goalArrowPos.y += 1.2;
             goalArrow3D.position.copy(goalArrowPos);
             
             // Calculate direction to goal from camera
@@ -1382,7 +1385,7 @@
             
             if (guntherVisible && serverState) {
                 const guntherArrowPos = basePos.clone();
-                guntherArrowPos.y += 0.25;
+                guntherArrowPos.y += 0.85;
                 guntherArrow3D.position.copy(guntherArrowPos);
                 
                 const toGunther = new THREE.Vector3(

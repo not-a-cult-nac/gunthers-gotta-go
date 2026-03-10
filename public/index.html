@@ -1506,16 +1506,22 @@
                     gunther.position.copy(seatPos);
                     gunther.rotation.y = carRotation;
                 } else if (state.gunther.state === 'carried') {
-                    // Carried above player's head - positioned so feet visible at top of frame
+                    // Carried above and slightly in front of player - visible at top of first person view
                     gunther.visible = true;
-                    const targetX = state.gunther.x;
-                    const targetZ = state.gunther.z;
-                    const targetY = getTerrainHeight(targetX, targetZ) + 3.2; // High enough to see feet at top of FOV
+                    // Position Gunther in front of and above the player so he's in camera view
+                    const carrierX = state.gunther.x;
+                    const carrierZ = state.gunther.z;
+                    const baseY = getTerrainHeight(carrierX, carrierZ);
+                    // Offset forward in player's facing direction
+                    const forwardOffset = 1.2;
+                    const targetX = carrierX + Math.sin(playerRotation) * forwardOffset;
+                    const targetZ = carrierZ + Math.cos(playerRotation) * forwardOffset;
+                    const targetY = baseY + 2.8; // Above head height
                     // Smooth interpolation
-                    gunther.position.x += (targetX - gunther.position.x) * 0.5;
-                    gunther.position.z += (targetZ - gunther.position.z) * 0.5;
-                    gunther.position.y += (targetY - gunther.position.y) * 0.5;
-                    // Little wobble instead of full spin
+                    gunther.position.x += (targetX - gunther.position.x) * 0.4;
+                    gunther.position.z += (targetZ - gunther.position.z) * 0.4;
+                    gunther.position.y += (targetY - gunther.position.y) * 0.4;
+                    // Little wobble
                     gunther.rotation.y = Math.sin(Date.now() * 0.003) * 0.3;
                 } else {
                     // Not in car - use server position with smoothing
@@ -1854,8 +1860,8 @@
                 // First person camera - at head height, looking forward
                 camera.position.set(player.position.x, player.position.y + 1.7, player.position.z);
                 
-                // When carrying Gunther, look slightly up so you can see him
-                const lookUpOffset = guntherHoldingHands ? 1.5 : 0;
+                // When carrying Gunther, look up more so you can see him at top of frame
+                const lookUpOffset = guntherHoldingHands ? 3.0 : 0;
                 const lookTarget = new THREE.Vector3(
                     player.position.x + forward.x * 10,
                     player.position.y + 1.7 + lookUpOffset,

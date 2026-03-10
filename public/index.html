@@ -616,7 +616,9 @@
         let car, player, gunther, goal;
         let handLinkGroup; // Visual connection when holding Gunther's hand
         let enemyMeshes = new Map();
+        let scoutMeshes = new Map();
         let killedEnemyIds = new Set(); // Track enemies killed (vs despawned) for sound
+        window.debugMapMode = false; // Press M to toggle top-down map view
         let otherPlayers = new Map();
         let isDriver = false;
         let myPlayerId = null;
@@ -703,6 +705,10 @@
                     debugPanelOpen = !debugPanelOpen;
                     panel.classList.toggle('open', debugPanelOpen);
                     e.preventDefault();
+                }
+                if (e.code === 'KeyM') {
+                    window.debugMapMode = !window.debugMapMode;
+                    console.log('Map debug mode:', window.debugMapMode);
                 }
             });
             
@@ -2929,6 +2935,13 @@
                 updateControls(delta);
                 updateInCarPositions();  // Smooth player positions in car
             }
+            
+            // Debug map mode - override camera for top-down view
+            if (window.debugMapMode && camera) {
+                camera.position.set(0, 200, 10);
+                camera.lookAt(0, 0, 10);
+            }
+            
             if (renderer && scene && camera) renderer.render(scene, camera);
         }
         

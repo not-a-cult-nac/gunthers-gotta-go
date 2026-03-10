@@ -471,6 +471,7 @@
         let playerId = null;
         let serverState = null;
         let lastHoldHandTime = 0; // Cooldown for hold/release to prevent flickering
+        let lastEnterExitTime = 0; // Cooldown for enter/exit to prevent flickering
         let grabRangeRing; // Visual indicator for grab range
         let gunViewModel; // First person gun model
         
@@ -910,11 +911,12 @@
         
         // Seat positions in the jeep (local coordinates)
         // Car faces +Z direction (hood at +Z, back at -Z)
+        // X: +0.7 = left side (driver), -0.7 = right side (passenger) when viewed from behind
         const SEAT_POSITIONS = [
-            { x: -0.7, y: 1.3, z: 0.8, label: 'driver' },       // Front left - driver
-            { x: 0.7, y: 1.3, z: 0.8, label: 'passenger' },     // Front right
-            { x: -0.7, y: 1.3, z: -1.2, label: 'back-left' },   // Back left
-            { x: 0.7, y: 1.3, z: -1.2, label: 'back-right' },   // Back right
+            { x: 0.7, y: 1.3, z: 0.8, label: 'driver' },        // Front left - driver
+            { x: -0.7, y: 1.3, z: 0.8, label: 'passenger' },    // Front right
+            { x: 0.7, y: 1.3, z: -1.2, label: 'back-left' },    // Back left
+            { x: -0.7, y: 1.3, z: -1.2, label: 'back-right' },  // Back right
         ];
         const GUNTHER_SEAT = { x: 0, y: 1.3, z: -1.2 };  // Middle back seat
         
@@ -995,7 +997,7 @@
                 steeringMat
             );
             steeringColumn.rotation.x = Math.PI / 6;  // Angled toward driver
-            steeringColumn.position.set(-0.7, 1.4, 1.3);
+            steeringColumn.position.set(0.7, 1.4, 1.3);
             car.add(steeringColumn);
             // Steering wheel ring
             const wheelRing = new THREE.Mesh(
@@ -1003,7 +1005,7 @@
                 steeringMat
             );
             wheelRing.rotation.x = Math.PI / 2 + Math.PI / 6;  // Match column angle
-            wheelRing.position.set(-0.7, 1.6, 1.45);
+            wheelRing.position.set(0.7, 1.6, 1.45);
             car.add(wheelRing);
             // Center hub of steering wheel
             const wheelHub = new THREE.Mesh(
@@ -1011,7 +1013,7 @@
                 steeringMat
             );
             wheelHub.rotation.x = Math.PI / 2 + Math.PI / 6;
-            wheelHub.position.set(-0.7, 1.6, 1.45);
+            wheelHub.position.set(0.7, 1.6, 1.45);
             car.add(wheelHub);
             
             // Wheels - front at +Z, back at -Z
@@ -1935,7 +1937,10 @@
             }
             
             // E to exit/enter (use GameInput)
-            if (GameInput.consumeAction('enterExit')) {
+            // 500ms cooldown to prevent rapid toggling
+            const enterExitNow = Date.now();
+            if (GameInput.consumeAction('enterExit') && (enterExitNow - lastEnterExitTime > 500)) {
+                lastEnterExitTime = enterExitNow;
                 if (isInCar) {
                     isInCar = false;
                     player.visible = true;

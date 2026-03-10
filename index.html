@@ -191,6 +191,7 @@
         
         // Controls
         const keys = {};
+        let debugMode = false;
         let mouseX = 0, mouseY = 0;
         let tankRotationY = 0;
         let cameraPitch = 0;
@@ -268,7 +269,13 @@
             spawnEnemy();  // A few free-roaming enemies to start
             
             // Event listeners
-            document.addEventListener('keydown', (e) => keys[e.code] = true);
+            document.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
+                if (e.code === 'KeyM') {
+                    debugMode = !debugMode;
+                    console.log('Debug mode:', debugMode);
+                }
+            });
             document.addEventListener('keyup', (e) => keys[e.code] = false);
             document.addEventListener('mousemove', onMouseMove);
             document.addEventListener('click', onShoot);
@@ -768,13 +775,21 @@
                 tank.position.z = Math.max(-60, Math.min(90, tank.position.z));
                 
                 // Camera follows tank
-                cameraPitch = -mouseY;
-                const camOffset = new THREE.Vector3(0, 5, -10);
-                camOffset.applyQuaternion(tank.quaternion);
-                camera.position.copy(tank.position).add(camOffset);
-                camera.position.y = tank.position.y + 5 + Math.sin(cameraPitch) * 3;
-                camera.lookAt(tank.position.x, tank.position.y + 3, tank.position.z);
-                camera.rotateX(cameraPitch * 0.5);
+                if (!debugMode) {
+                    cameraPitch = -mouseY;
+                    const camOffset = new THREE.Vector3(0, 5, -10);
+                    camOffset.applyQuaternion(tank.quaternion);
+                    camera.position.copy(tank.position).add(camOffset);
+                    camera.position.y = tank.position.y + 5 + Math.sin(cameraPitch) * 3;
+                    camera.lookAt(tank.position.x, tank.position.y + 3, tank.position.z);
+                    camera.rotateX(cameraPitch * 0.5);
+                }
+            }
+            
+            // Debug mode: top-down view of entire field
+            if (debugMode) {
+                camera.position.set(0, 150, 20);
+                camera.lookAt(0, 0, 20);
             }
             
             // Exit/Enter tank

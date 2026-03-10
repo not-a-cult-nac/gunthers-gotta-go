@@ -87,7 +87,7 @@ class GameRoom {
         this.config = {
             escapeRate: 0.015,      // Probability per second of random escape (reduced from 0.05)
             lureRange: 12,          // Distance at which enemies lure Gunther out
-            enemySpeed: 3,          // Base enemy movement speed
+            enemySpeed: 5,          // Base enemy movement speed (faster!)
             guntherSpeed: 3.5       // Gunther wander speed
         };
     }
@@ -102,8 +102,8 @@ class GameRoom {
     
     start() {
         this.gameState = 'playing';
-        // Spawn initial enemies along the route (start with 20)
-        for (let i = 0; i < 20; i++) {
+        // Spawn initial enemies along the route (start with 30)
+        for (let i = 0; i < 30; i++) {
             this.spawnEnemy();
         }
     }
@@ -261,7 +261,7 @@ class GameRoom {
         }
         
         // Enemy AI
-        const ENEMY_DETECTION_RANGE = 80; // Increased range - only chase if within this range
+        const ENEMY_DETECTION_RANGE = 150; // Large range - enemies always active when nearby
         
         for (const enemy of this.enemies) {
             const guntherVulnerable = this.gunther.state === 'wandering' || this.gunther.state === 'trapped';
@@ -293,10 +293,20 @@ class GameRoom {
             enemy.vz = 0;
             
             if (enemy.type === 'stealer') {
-                // STEALERS: chase Gunther to steal him
-                if (guntherVulnerable && !enemy.hasGunther && inRange) {
-                    const dx = this.gunther.x - enemy.x;
-                    const dz = this.gunther.z - enemy.z;
+                // STEALERS: always chase Gunther (or car if Gunther in car)
+                let targetX, targetZ;
+                if (guntherVulnerable && !enemy.hasGunther) {
+                    targetX = this.gunther.x;
+                    targetZ = this.gunther.z;
+                } else if (!enemy.hasGunther) {
+                    // Gunther in car - chase the car
+                    targetX = this.car.x;
+                    targetZ = this.car.z;
+                }
+                
+                if (targetX !== undefined && !enemy.hasGunther) {
+                    const dx = targetX - enemy.x;
+                    const dz = targetZ - enemy.z;
                     const dist = Math.hypot(dx, dz);
                     if (dist > 0) {
                         enemy.vx = (dx / dist) * enemy.speed;
@@ -304,8 +314,8 @@ class GameRoom {
                         enemy.x += enemy.vx * delta;
                         enemy.z += enemy.vz * delta;
                     }
-                    // Capture Gunther if close enough
-                    if (dist < 2) {
+                    // Capture Gunther if close enough and vulnerable
+                    if (guntherVulnerable && dist < 2) {
                         enemy.hasGunther = true;
                         this.gunther.state = 'captured';
                         this.gunther.captorId = enemy.id;
@@ -314,23 +324,12 @@ class GameRoom {
                         this.gunther.holderId = null;
                         this.lastQuote = "Ooh! You have ze candies? I come viz you!";
                     }
-                } else if (!enemy.hasGunther && inRange) {
-                    // Wander toward car
-                    const dx = this.car.x - enemy.x;
-                    const dz = this.car.z - enemy.z;
-                    const dist = Math.hypot(dx, dz);
-                    if (dist > 0) {
-                        enemy.vx = (dx / dist) * enemy.speed * 0.3;
-                        enemy.vz = (dz / dist) * enemy.speed * 0.3;
-                        enemy.x += enemy.vx * delta;
-                        enemy.z += enemy.vz * delta;
-                    }
                 }
             } else if (enemy.type === 'killer') {
-                // KILLERS: chase player/jeep to ram and explode
+                // KILLERS: always chase player/jeep
                 let targetX, targetZ;
-                if (closestPlayer && closestPlayerDist < 30) {
-                    // Chase on-foot player
+                if (closestPlayer && closestPlayerDist < 50) {
+                    // Chase on-foot player if reasonably close
                     targetX = closestPlayer.x;
                     targetZ = closestPlayer.z;
                 } else {
@@ -342,7 +341,7 @@ class GameRoom {
                 const dx = targetX - enemy.x;
                 const dz = targetZ - enemy.z;
                 const dist = Math.hypot(dx, dz);
-                if (dist > 0 && inRange) {
+                if (dist > 0) {
                     enemy.vx = (dx / dist) * enemy.speed;
                     enemy.vz = (dz / dist) * enemy.speed;
                     enemy.x += enemy.vx * delta;
@@ -429,7 +428,8 @@ class GameRoom {
         }
         
         // Spawn enemies as car progresses (more aggressive spawning, up to 50 max)
-        if (Math.random() < 0.02 && this.enemies.length < 50) {
+        // Spawn enemies frequently - up to 50 max
+        if (Math.random() < 0.04 && this.enemies.length < 50) {
             this.spawnEnemy();
         }
         

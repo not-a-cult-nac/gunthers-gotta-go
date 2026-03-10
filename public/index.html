@@ -78,12 +78,14 @@
         }
         #goal-arrow .arrow { font-size: 32px; }
         #gunther-arrow {
-            top: 95px; left: 50%; transform: translateX(-50%);
+            top: 50px; left: 50%; transform: translateX(-50%);
             color: #ffeb3b;
             display: none;
+            flex-direction: column;
+            align-items: center;
         }
         #gunther-arrow .arrow { font-size: 28px; display: none; }
-        #gunther-arrow .distance { font-size: 18px; color: #fff; font-weight: bold; margin-top: 0px; }
+        #gunther-arrow .distance { font-size: 16px; color: #fff; font-weight: bold; position: absolute; top: 80px; }
         
         /* Health bars */
         #health-bars {
@@ -2139,7 +2141,10 @@
         }
         
         function updateFromServer(state) {
-            // Update health from server
+            // Update health from server - track damage for SFX
+            const prevJeepHealth = jeepHealth;
+            const prevPlayerHealth = playerHealth;
+            
             if (state.jeepHealth !== undefined) jeepHealth = state.jeepHealth;
             if (state.jeepDisabled !== undefined) jeepDisabled = state.jeepDisabled;
             
@@ -2148,6 +2153,10 @@
                 const me = state.players.find(p => p.id === socket.id);
                 if (me && me.health !== undefined) playerHealth = me.health;
             }
+            
+            // Play damage SFX
+            if (jeepHealth < prevJeepHealth) SFX.jeepDamage();
+            if (playerHealth < prevPlayerHealth) SFX.playerDamage();
             
             // Create smoke if jeep is damaged
             if (jeepHealth <= 33 && !jeepSmoke) createJeepSmoke();
@@ -2655,9 +2664,10 @@
                         gunViewModel.position.x += forward.x * 0.5 + right.x * 0.3;
                         gunViewModel.position.z += forward.z * 0.5 + right.z * 0.3;
                         gunViewModel.position.y -= 0.3;
-                        gunViewModel.rotation.order = 'YXZ';
-                        gunViewModel.rotation.x = -cameraPitch; // Negated so looking up points gun up
+                        // Gun follows camera pitch - positive cameraPitch = looking up = gun points up
+                        gunViewModel.rotation.order = 'ZYX';
                         gunViewModel.rotation.y = playerRotation;
+                        gunViewModel.rotation.z = cameraPitch;
                     }
                 }
             }

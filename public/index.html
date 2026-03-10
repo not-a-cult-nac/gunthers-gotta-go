@@ -472,6 +472,7 @@
         let serverState = null;
         let lastHoldHandTime = 0; // Cooldown for hold/release to prevent flickering
         let lastEnterExitTime = 0; // Cooldown for enter/exit to prevent flickering
+        let lastShootTime = 0; // Cooldown for shooting
         let grabRangeRing; // Visual indicator for grab range
         let gunViewModel; // First person gun model
         
@@ -865,7 +866,7 @@
             document.addEventListener('keydown', e => keys[e.code] = true);
             document.addEventListener('keyup', e => keys[e.code] = false);
             document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('click', onShoot);
+            // Shooting now handled via GameInput in human-input.js (left-click only)
             window.addEventListener('resize', onResize);
             
             // Initialize input system
@@ -1978,7 +1979,10 @@
             }
             
             // Shooting (use GameInput) - ON FOOT ONLY, and NOT while carrying Gunther!
-            if (GameInput.consumeAction('shoot') && !isInCar && !guntherHoldingHands) {
+            // 200ms cooldown between shots
+            const shootNow = Date.now();
+            if (GameInput.consumeAction('shoot') && !isInCar && !guntherHoldingHands && (shootNow - lastShootTime > 200)) {
+                lastShootTime = shootNow;
                 let dirX, dirZ;
                 // AI can specify custom shoot direction
                 if (GameInput.shootDirection) {

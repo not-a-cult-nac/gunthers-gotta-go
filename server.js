@@ -52,6 +52,36 @@ const holdingHandsQuotes = [
     "Your hand is sweaty! I must escape!"
 ];
 
+// Winding path through terrain - returns X offset for the path at given Z
+function getPathX(z) {
+    const curve1 = Math.sin(z * 0.015) * 25;
+    const curve2 = Math.sin(z * 0.008 + 1.5) * 15;
+    const curve3 = Math.sin(z * 0.003 + 3) * 10;
+    return curve1 + curve2 + curve3;
+}
+
+// Simplified terrain height calculation (matches client)
+function getTerrainHeight(x, z) {
+    const bigHills = Math.sin(x * 0.012) * Math.cos(z * 0.01) * 12;
+    const ridges = Math.sin(x * 0.025 + z * 0.015) * 8;
+    const mediumHills = Math.sin(x * 0.05 + 2) * Math.cos(z * 0.04) * 5;
+    
+    let height = bigHills + ridges + mediumHills;
+    
+    // Path flattening
+    const pathX = getPathX(z);
+    const distFromPath = Math.abs(x - pathX);
+    const pathWidth = 18;
+    
+    if (distFromPath < pathWidth) {
+        const pathInfluence = 1 - (distFromPath / pathWidth);
+        const smoothInfluence = pathInfluence * pathInfluence * (3 - 2 * pathInfluence);
+        height *= (1 - smoothInfluence * 0.85);
+    }
+    
+    return Math.max(0, height);
+}
+
 // Hazard positions along the 500m route
 const HAZARDS = [
     // Bear traps scattered throughout
@@ -312,8 +342,17 @@ class GameRoom {
                     const dz = targetZ - enemy.z;
                     const dist = Math.hypot(dx, dz);
                     if (dist > 0) {
-                        enemy.vx = (dx / dist) * enemy.speed;
-                        enemy.vz = (dz / dist) * enemy.speed;
+                        // Calculate uphill slowdown
+                        const currentHeight = getTerrainHeight(enemy.x, enemy.z);
+                        const nextX = enemy.x + (dx / dist) * 0.5;
+                        const nextZ = enemy.z + (dz / dist) * 0.5;
+                        const nextHeight = getTerrainHeight(nextX, nextZ);
+                        const slope = (nextHeight - currentHeight) / 0.5;
+                        // Slow down when going uphill (slope > 0), normal speed downhill
+                        const slopeFactor = slope > 0 ? Math.max(0.3, 1 - slope * 0.15) : 1;
+                        
+                        enemy.vx = (dx / dist) * enemy.speed * slopeFactor;
+                        enemy.vz = (dz / dist) * enemy.speed * slopeFactor;
                         enemy.x += enemy.vx * delta;
                         enemy.z += enemy.vz * delta;
                     }
@@ -349,8 +388,17 @@ class GameRoom {
                 const dz = targetZ - enemy.z;
                 const dist = Math.hypot(dx, dz);
                 if (dist > 0) {
-                    enemy.vx = (dx / dist) * enemy.speed;
-                    enemy.vz = (dz / dist) * enemy.speed;
+                    // Calculate uphill slowdown
+                    const currentHeight = getTerrainHeight(enemy.x, enemy.z);
+                    const nextX = enemy.x + (dx / dist) * 0.5;
+                    const nextZ = enemy.z + (dz / dist) * 0.5;
+                    const nextHeight = getTerrainHeight(nextX, nextZ);
+                    const slope = (nextHeight - currentHeight) / 0.5;
+                    // Slow down when going uphill (slope > 0), normal speed downhill
+                    const slopeFactor = slope > 0 ? Math.max(0.3, 1 - slope * 0.15) : 1;
+                    
+                    enemy.vx = (dx / dist) * enemy.speed * slopeFactor;
+                    enemy.vz = (dz / dist) * enemy.speed * slopeFactor;
                     enemy.x += enemy.vx * delta;
                     enemy.z += enemy.vz * delta;
                 }
@@ -363,9 +411,12 @@ class GameRoom {
         if (!this.pendingEvents) this.pendingEvents = [];
         
         for (const enemy of this.enemies) {
+            // Skip enemies that have already dealt damage and are dying
+            if (enemy.dying) continue;
+            
             // Check collision with jeep (side/back hits damage jeep)
             const distToCar = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
-            if (distToCar < 3 && !this.car.disabled && !enemy.hitJeepThisFrame) {
+            if (distToCar < 3 && !this.car.disabled) {
                 // Check if it's a front hit (jeep runs them over) or side/back hit
                 const carForward = { x: Math.sin(this.car.rotation), z: Math.cos(this.car.rotation) };
                 const toEnemy = { x: enemy.x - this.car.x, z: enemy.z - this.car.z };
@@ -375,7 +426,7 @@ class GameRoom {
                     // Front hit - enemy dies (handled by client roadkill)
                 } else {
                     // Side/back hit - enemy damages jeep
-                    enemy.hitJeepThisFrame = true; // Prevent multiple hits per frame
+                    enemy.dying = true; // Mark as dying - won't deal damage again
                     this.car.health = Math.max(0, this.car.health - 15);
                     this.pendingEvents.push({ 
                         type: 'jeepDamage', 
@@ -404,8 +455,8 @@ class GameRoom {
             for (const [id, p] of this.players) {
                 if (!p.inCar) {
                     const distToPlayer = Math.hypot(enemy.x - p.x, enemy.z - p.z);
-                    if (distToPlayer < 2 && !enemy.hitPlayerThisFrame) {
-                        enemy.hitPlayerThisFrame = true; // Prevent multiple hits per frame
+                    if (distToPlayer < 2 && !enemy.dying) {
+                        enemy.dying = true; // Mark as dying - won't deal damage again
                         // Player takes damage
                         if (!this.playerHealth[id]) this.playerHealth[id] = 100;
                         this.playerHealth[id] = Math.max(0, this.playerHealth[id] - 20);
@@ -428,11 +479,7 @@ class GameRoom {
             }
         }
         
-        // Reset hit flags
-        for (const enemy of this.enemies) {
-            enemy.hitJeepThisFrame = false;
-            enemy.hitPlayerThisFrame = false;
-        }
+        // Note: hit flags replaced with 'dying' flag that persists until enemy removed
         
         // Remove exploded killers
         this.enemies = this.enemies.filter(e => !enemiesToRemove.has(e.id));

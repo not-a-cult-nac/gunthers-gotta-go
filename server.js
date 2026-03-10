@@ -98,6 +98,11 @@ const HAZARDS = [
 const GOAL_Z = 440;
 const START_Z = -60;
 
+// Enemy clustering constants
+const LURE_DISTANCE = 40;
+const SCOUT_DETECTION_RANGE = 35;
+const AMBUSH_POINTS = [50, 150, 250, 350]; // Z positions for ambush clumps
+
 class GameRoom {
     constructor(code) {
         this.code = code;
@@ -106,6 +111,11 @@ class GameRoom {
         this.car = { x: 0, z: START_Z, rotation: 0, health: 150, disabled: false }; // 50% more health
         this.gunther = { x: 0, z: START_Z, state: 'in_car', visible: false, captorId: null, trapPos: null, holderId: null };
         this.enemies = [];
+        this.clumps = [];
+        this.scouts = [];
+        this.ambushesSpawned = new Set();
+        this.clumpIdCounter = 0;
+        this.scoutIdCounter = 0;
         this.gameState = 'waiting';
         this.lastUpdate = Date.now();
         this.enemyIdCounter = 0;
@@ -132,10 +142,15 @@ class GameRoom {
     
     start() {
         this.gameState = 'playing';
-        // Spawn initial enemies gradually (start with 5, more spawn over time)
-        for (let i = 0; i < 5; i++) {
-            this.spawnEnemy();
+        // Spawn clumps at ambush points
+        for (const ambushZ of AMBUSH_POINTS) {
+            const size = ambushZ > 250 ? 'large' : 'small';
+            this.spawnClump(ambushZ, size);
+            this.ambushesSpawned.add(ambushZ);
         }
+        // Spawn a couple scouts
+        this.spawnScout();
+        this.spawnScout();
     }
     
     spawnEnemy() {
@@ -158,10 +173,92 @@ class GameRoom {
             vz: 0,
             health: 2,
             hasGunther: false,
-            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.2  // another 10% slower
+            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.2,  // another 10% slower
+            dormant: false,
+            clumpId: null
         };
         this.enemies.push(enemy);
         return enemy;
+    }
+    
+    spawnClumpEnemy(x, z, clumpId) {
+        const baseSpeed = this.config.enemySpeed;
+        const type = Math.random() < 0.4 ? 'killer' : 'stealer';
+        const speedMult = type === 'killer' ? 1.45 : 1.2;
+        const enemy = {
+            id: this.enemyIdCounter++,
+            type: type,
+            x: x,
+            z: z,
+            vx: 0,
+            vz: 0,
+            health: 2,
+            hasGunther: false,
+            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.2,
+            dormant: true,
+            clumpId: clumpId
+        };
+        this.enemies.push(enemy);
+        return enemy;
+    }
+    
+    spawnClump(z, size = 'small') {
+        const clumpId = this.clumpIdCounter++;
+        const side = Math.random() > 0.5 ? 1 : -1;
+        const baseX = side * (15 + Math.random() * 20);
+        const enemyCount = size === 'large' ? 6 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 2);
+        
+        const clump = {
+            id: clumpId,
+            x: baseX,
+            z: z,
+            alerted: false,
+            size: size,
+            enemyIds: []
+        };
+        
+        for (let i = 0; i < enemyCount; i++) {
+            const offsetX = (Math.random() - 0.5) * 12;
+            const offsetZ = (Math.random() - 0.5) * 12;
+            const enemy = this.spawnClumpEnemy(baseX + offsetX, z + offsetZ, clumpId);
+            clump.enemyIds.push(enemy.id);
+        }
+        
+        this.clumps.push(clump);
+        return clump;
+    }
+    
+    spawnScout() {
+        const minZ = Math.max(START_Z + 40, this.car.z + 30);
+        const maxZ = Math.min(GOAL_Z - 50, this.car.z + 100);
+        if (minZ >= maxZ) return null;
+        
+        const side = Math.random() > 0.5 ? 1 : -1;
+        const baseSpeed = this.config.enemySpeed * 0.7;
+        
+        const scout = {
+            id: this.scoutIdCounter++,
+            x: side * (10 + Math.random() * 30),
+            z: minZ + Math.random() * (maxZ - minZ),
+            vx: 0,
+            vz: 0,
+            health: 1,
+            speed: baseSpeed,
+            hasFired: false,
+            wanderAngle: Math.random() * Math.PI * 2,
+            wanderTimer: 0
+        };
+        this.scouts.push(scout);
+        return scout;
+    }
+    
+    alertClump(clump) {
+        clump.alerted = true;
+        for (const enemy of this.enemies) {
+            if (enemy.clumpId === clump.id) {
+                enemy.dormant = false;
+            }
+        }
     }
     
     update(delta) {
@@ -292,10 +389,87 @@ class GameRoom {
             }
         }
         
+        // Update scouts
+        for (const scout of this.scouts) {
+            const distToCar = Math.hypot(scout.x - this.car.x, scout.z - this.car.z);
+            
+            // Check if scout detects player
+            if (!scout.hasFired && distToCar < SCOUT_DETECTION_RANGE) {
+                scout.hasFired = true;
+                
+                // Find nearest dormant clump to alert
+                let nearestClump = null;
+                let nearestDist = Infinity;
+                for (const clump of this.clumps) {
+                    if (!clump.alerted) {
+                        const d = Math.hypot(clump.x - scout.x, clump.z - scout.z);
+                        if (d < nearestDist) {
+                            nearestDist = d;
+                            nearestClump = clump;
+                        }
+                    }
+                }
+                
+                // Fire flare event
+                if (!this.pendingEvents) this.pendingEvents = [];
+                this.pendingEvents.push({ type: 'flare', scoutId: scout.id, x: scout.x, z: scout.z });
+                
+                // Alert the clump
+                if (nearestClump) {
+                    this.alertClump(nearestClump);
+                }
+            }
+            
+            // Scout movement
+            if (scout.hasFired) {
+                // After firing, chase car
+                const dx = this.car.x - scout.x;
+                const dz = this.car.z - scout.z;
+                const dist = Math.hypot(dx, dz);
+                if (dist > 0) {
+                    scout.vx = (dx / dist) * scout.speed;
+                    scout.vz = (dz / dist) * scout.speed;
+                    scout.x += scout.vx * delta;
+                    scout.z += scout.vz * delta;
+                }
+            } else {
+                // Wander randomly
+                scout.wanderTimer -= delta;
+                if (scout.wanderTimer <= 0) {
+                    scout.wanderAngle += (Math.random() - 0.5) * Math.PI;
+                    scout.wanderTimer = 1 + Math.random() * 2;
+                }
+                scout.vx = Math.sin(scout.wanderAngle) * scout.speed * 0.5;
+                scout.vz = Math.cos(scout.wanderAngle) * scout.speed * 0.5;
+                scout.x += scout.vx * delta;
+                scout.z += scout.vz * delta;
+                scout.x = Math.max(-45, Math.min(45, scout.x));
+            }
+        }
+        
+        // Remove scouts too far behind
+        this.scouts = this.scouts.filter(s => s.z > this.car.z - 100);
+        
         // Enemy AI
         const ENEMY_DETECTION_RANGE = 150; // Large range - enemies always active when nearby
         
         for (const enemy of this.enemies) {
+            // Handle dormant enemies (from clumps)
+            if (enemy.dormant) {
+                const distToCar = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
+                if (distToCar < LURE_DISTANCE) {
+                    // Wake up this enemy and its clump
+                    enemy.dormant = false;
+                    if (enemy.clumpId !== null) {
+                        const clump = this.clumps.find(c => c.id === enemy.clumpId);
+                        if (clump && !clump.alerted) {
+                            this.alertClump(clump);
+                        }
+                    }
+                }
+                continue; // Skip movement while dormant
+            }
+            
             const guntherVulnerable = this.gunther.state === 'wandering' || this.gunther.state === 'trapped';
             
             // Check if enemy is close enough to be "active" - consider car, Gunther, and players
@@ -534,11 +708,25 @@ class GameRoom {
             this.loseReason = 'All players have been eliminated!';
         }
         
-        // Spawn enemies continuously up to 50 max (steady flow)
-        // Higher spawn rate to replace killed enemies
-        if (Math.random() < 0.025 && this.enemies.length < 50) {
-            this.spawnEnemy();
+        // Spawn random clumps ahead (supplementing fixed ambush points)
+        if (Math.random() < 0.005 && this.clumps.length < 10) {
+            const spawnZ = this.car.z + 80 + Math.random() * 60;
+            if (spawnZ < GOAL_Z - 40) {
+                const nearAmbush = AMBUSH_POINTS.some(az => Math.abs(az - spawnZ) < 40);
+                if (!nearAmbush) {
+                    const size = spawnZ > 300 ? (Math.random() > 0.5 ? 'large' : 'small') : 'small';
+                    this.spawnClump(spawnZ, size);
+                }
+            }
         }
+        
+        // Spawn scouts periodically
+        if (Math.random() < 0.003 && this.scouts.length < 3) {
+            this.spawnScout();
+        }
+        
+        // Remove old clumps
+        this.clumps = this.clumps.filter(c => c.z > this.car.z - 80);
         
         // Remove enemies too far behind (silently despawn - no death effect)
         this.enemies = this.enemies.filter(e => e.z > this.car.z - 150 || e.hasGunther);
@@ -762,7 +950,9 @@ class GameRoom {
             goalZ: GOAL_Z,
             startZ: START_Z,
             jeepHealth: this.car.health,
-            jeepDisabled: this.car.disabled
+            jeepDisabled: this.car.disabled,
+            scouts: this.scouts,
+            clumps: this.clumps
         };
     }
     

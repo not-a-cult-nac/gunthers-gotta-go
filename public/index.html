@@ -78,12 +78,12 @@
         }
         #goal-arrow .arrow { font-size: 32px; }
         #gunther-arrow {
-            top: 110px; left: 50%; transform: translateX(-50%);
+            top: 140px; left: 50%; transform: translateX(-50%);
             color: #ffeb3b;
             display: none;
         }
-        #gunther-arrow .arrow { font-size: 28px; }
-        #gunther-arrow .distance { font-size: 16px; color: #fff; }
+        #gunther-arrow .arrow { font-size: 28px; display: none; }
+        #gunther-arrow .distance { font-size: 22px; color: #fff; font-weight: bold; }
         
         #end-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -1309,25 +1309,26 @@
             const arrow = new THREE.Group();
             const mat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
             
-            // Flat chevron arrow shape
+            // Flat chevron arrow shape (pointing in +Z direction)
             const shape = new THREE.Shape();
-            const s = scale * 0.3;
-            // Arrow pointing up (will be rotated)
-            shape.moveTo(0, s * 1.2);        // Tip
-            shape.lineTo(-s * 0.8, -s * 0.3); // Bottom left
+            const s = scale * 0.15;  // Smaller arrows
+            // Arrow pointing forward (+Z when laid flat)
+            shape.moveTo(0, s * 1.2);         // Tip (front)
+            shape.lineTo(-s * 0.8, -s * 0.3); // Back left
             shape.lineTo(-s * 0.3, 0);        // Inner left
-            shape.lineTo(0, -s * 0.5);        // Inner bottom
+            shape.lineTo(0, -s * 0.5);        // Inner back
             shape.lineTo(s * 0.3, 0);         // Inner right
-            shape.lineTo(s * 0.8, -s * 0.3);  // Bottom right
+            shape.lineTo(s * 0.8, -s * 0.3);  // Back right
             shape.lineTo(0, s * 1.2);         // Back to tip
             
             const geometry = new THREE.ExtrudeGeometry(shape, {
-                depth: 0.02 * scale,
+                depth: 0.015 * scale,
                 bevelEnabled: false
             });
             
             const mesh = new THREE.Mesh(geometry, mat);
             mesh.rotation.x = -Math.PI / 2; // Lay flat
+            mesh.rotation.z = Math.PI;      // Flip to point forward
             arrow.add(mesh);
             
             return arrow;
@@ -1363,9 +1364,9 @@
             const arrowDistance = 2;
             const basePos = camPos.clone().add(camDir.clone().multiplyScalar(arrowDistance));
             
-            // Goal arrow - always visible, high above view
+            // Goal arrow - always visible, above view
             const goalArrowPos = basePos.clone();
-            goalArrowPos.y += 1.2;
+            goalArrowPos.y += 0.6;
             goalArrow3D.position.copy(goalArrowPos);
             
             // Calculate direction to goal from camera
@@ -1385,7 +1386,7 @@
             
             if (guntherVisible && serverState) {
                 const guntherArrowPos = basePos.clone();
-                guntherArrowPos.y += 0.85;
+                guntherArrowPos.y += 0.35;
                 guntherArrow3D.position.copy(guntherArrowPos);
                 
                 const toGunther = new THREE.Vector3(

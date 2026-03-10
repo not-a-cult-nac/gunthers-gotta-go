@@ -54,10 +54,6 @@ const holdingHandsQuotes = [
 
 // Hazard positions along the 500m route
 const HAZARDS = [
-    // Cliffs
-    { x: -50, z: 100, type: 'cliff', radius: 15 },
-    { x: 55, z: 250, type: 'cliff', radius: 12 },
-    { x: -45, z: 380, type: 'cliff', radius: 15 },
     // Bear traps scattered throughout
     { x: -15, z: 20, type: 'trap', radius: 2 },
     { x: 20, z: 80, type: 'trap', radius: 2 },

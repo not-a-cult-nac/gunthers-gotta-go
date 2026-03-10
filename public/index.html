@@ -78,12 +78,12 @@
         }
         #goal-arrow .arrow { font-size: 32px; }
         #gunther-arrow {
-            top: 65px; left: 50%; transform: translateX(-50%);
+            top: 50px; left: 50%; transform: translateX(-50%);
             color: #ffeb3b;
             display: none;
         }
         #gunther-arrow .arrow { font-size: 28px; display: none; }
-        #gunther-arrow .distance { font-size: 20px; color: #fff; font-weight: bold; }
+        #gunther-arrow .distance { font-size: 18px; color: #fff; font-weight: bold; margin-top: -5px; }
         
         /* Health bars */
         #health-bars {
@@ -705,9 +705,6 @@
         
         // Hazards (must match server)
         const HAZARDS = [
-            { x: -50, z: 100, type: 'cliff', radius: 15 },
-            { x: 55, z: 250, type: 'cliff', radius: 12 },
-            { x: -45, z: 380, type: 'cliff', radius: 15 },
             { x: -15, z: 20, type: 'trap', radius: 2 },
             { x: 20, z: 80, type: 'trap', radius: 2 },
             { x: -25, z: 140, type: 'trap', radius: 2 },
@@ -2611,7 +2608,9 @@
                         gunViewModel.position.x += forward.x * 0.5 + right.x * 0.3;
                         gunViewModel.position.z += forward.z * 0.5 + right.z * 0.3;
                         gunViewModel.position.y -= 0.3;
-                        gunViewModel.rotation.set(cameraPitch, playerRotation, 0); // Pitch gun with camera
+                        gunViewModel.rotation.order = 'YXZ';
+                        gunViewModel.rotation.x = cameraPitch;
+                        gunViewModel.rotation.y = playerRotation;
                     }
                 }
             }

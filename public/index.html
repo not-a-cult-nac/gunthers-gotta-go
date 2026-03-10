@@ -229,6 +229,12 @@
             text-align: center;
             margin-top: 10px;
         }
+        
+        /* Damage flash animation */
+        @keyframes damageFlash {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -906,13 +912,110 @@
             }
         });
         
-        socket.on('jeepDamage', () => {
+        socket.on('jeepDamage', (data) => {
             SFX.jeepDamage();
+            // Visual effect: screen shake + red flash + sparks at impact
+            createDamageEffect('jeep', data);
         });
         
-        socket.on('playerDamage', () => {
+        socket.on('playerDamage', (data) => {
             SFX.playerDamage();
+            // Visual effect: screen shake + red vignette + blood splatter
+            createDamageEffect('player', data);
         });
+        
+        // Visual damage effects
+        function createDamageEffect(type, data) {
+            // Screen shake
+            const shakeIntensity = type === 'player' ? 15 : 10;
+            const shakeDuration = 200;
+            const startTime = Date.now();
+            const origCamPos = camera.position.clone();
+            
+            const shake = () => {
+                const elapsed = Date.now() - startTime;
+                if (elapsed < shakeDuration) {
+                    const intensity = shakeIntensity * (1 - elapsed / shakeDuration);
+                    camera.position.x = origCamPos.x + (Math.random() - 0.5) * intensity * 0.05;
+                    camera.position.y = origCamPos.y + (Math.random() - 0.5) * intensity * 0.05;
+                    requestAnimationFrame(shake);
+                }
+            };
+            shake();
+            
+            // Red flash overlay
+            const flash = document.createElement('div');
+            flash.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: ${type === 'player' ? 'rgba(255,0,0,0.4)' : 'rgba(255,100,0,0.3)'};
+                pointer-events: none; z-index: 999;
+                animation: damageFlash 0.3s ease-out forwards;
+            `;
+            document.body.appendChild(flash);
+            setTimeout(() => flash.remove(), 300);
+            
+            // Sparks/particles at impact point (if we have position)
+            if (data && data.x !== undefined && scene) {
+                const impactPos = new THREE.Vector3(data.x, 1, data.z);
+                const particleCount = type === 'player' ? 15 : 20;
+                const particleColor = type === 'player' ? 0xff0000 : 0xff6600;
+                
+                for (let i = 0; i < particleCount; i++) {
+                    const particle = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.1),
+                        new THREE.MeshBasicMaterial({ color: particleColor })
+                    );
+                    particle.position.copy(impactPos);
+                    particle.velocity = new THREE.Vector3(
+                        (Math.random() - 0.5) * 0.5,
+                        Math.random() * 0.4,
+                        (Math.random() - 0.5) * 0.5
+                    );
+                    scene.add(particle);
+                    
+                    // Animate particles
+                    let frame = 0;
+                    const animateParticle = () => {
+                        frame++;
+                        particle.velocity.y -= 0.02; // gravity
+                        particle.position.add(particle.velocity);
+                        particle.scale.multiplyScalar(0.95);
+                        if (frame < 40) {
+                            requestAnimationFrame(animateParticle);
+                        } else {
+                            scene.remove(particle);
+                        }
+                    };
+                    animateParticle();
+                }
+                
+                // Explosion effect for killer enemies
+                if (data.enemyType === 'killer') {
+                    const explosionGeo = new THREE.SphereGeometry(2);
+                    const explosionMat = new THREE.MeshBasicMaterial({ 
+                        color: 0xff4400, 
+                        transparent: true, 
+                        opacity: 0.8 
+                    });
+                    const explosion = new THREE.Mesh(explosionGeo, explosionMat);
+                    explosion.position.copy(impactPos);
+                    scene.add(explosion);
+                    
+                    let expFrame = 0;
+                    const animateExplosion = () => {
+                        expFrame++;
+                        explosion.scale.multiplyScalar(1.15);
+                        explosion.material.opacity *= 0.85;
+                        if (expFrame < 20) {
+                            requestAnimationFrame(animateExplosion);
+                        } else {
+                            scene.remove(explosion);
+                        }
+                    };
+                    animateExplosion();
+                }
+            }
+        }
         
         function startGame() { socket.emit('startGame'); }
         

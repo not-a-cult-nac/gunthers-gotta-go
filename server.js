@@ -102,8 +102,8 @@ class GameRoom {
     
     start() {
         this.gameState = 'playing';
-        // Spawn initial enemies along the route (start with 30)
-        for (let i = 0; i < 30; i++) {
+        // Spawn initial enemies gradually (start with 5, more spawn over time)
+        for (let i = 0; i < 5; i++) {
             this.spawnEnemy();
         }
     }
@@ -293,18 +293,19 @@ class GameRoom {
             enemy.vz = 0;
             
             if (enemy.type === 'stealer') {
-                // STEALERS: always chase Gunther (or car if Gunther in car)
+                // STEALERS: ALWAYS chase Gunther - only target jeep when Gunther is IN jeep
                 let targetX, targetZ;
-                if (guntherVulnerable && !enemy.hasGunther) {
-                    targetX = this.gunther.x;
-                    targetZ = this.gunther.z;
-                } else if (!enemy.hasGunther) {
-                    // Gunther in car - chase the car
-                    targetX = this.car.x;
-                    targetZ = this.car.z;
-                }
-                
-                if (targetX !== undefined && !enemy.hasGunther) {
+                if (!enemy.hasGunther) {
+                    if (this.gunther.state === 'in_car') {
+                        // Gunther is in the jeep - chase the jeep
+                        targetX = this.car.x;
+                        targetZ = this.car.z;
+                    } else {
+                        // Gunther is outside - chase Gunther directly
+                        targetX = this.gunther.x;
+                        targetZ = this.gunther.z;
+                    }
+                    
                     const dx = targetX - enemy.x;
                     const dz = targetZ - enemy.z;
                     const dist = Math.hypot(dx, dz);
@@ -326,14 +327,18 @@ class GameRoom {
                     }
                 }
             } else if (enemy.type === 'killer') {
-                // KILLERS: always chase player/jeep
+                // KILLERS: ALWAYS chase player - only target jeep when ALL players are IN jeep
                 let targetX, targetZ;
-                if (closestPlayer && closestPlayerDist < 50) {
-                    // Chase on-foot player if reasonably close
+                
+                // Check if any player is on foot
+                const anyPlayerOnFoot = closestPlayer !== null;
+                
+                if (anyPlayerOnFoot) {
+                    // Chase the closest on-foot player
                     targetX = closestPlayer.x;
                     targetZ = closestPlayer.z;
                 } else {
-                    // Chase jeep
+                    // All players in jeep - chase the jeep
                     targetX = this.car.x;
                     targetZ = this.car.z;
                 }
@@ -370,7 +375,12 @@ class GameRoom {
                     // Side/back hit - enemy damages jeep
                     enemy.hitJeepThisFrame = true; // Prevent multiple hits per frame
                     this.car.health = Math.max(0, this.car.health - 15);
-                    this.pendingEvents.push({ type: 'jeepDamage' });
+                    this.pendingEvents.push({ 
+                        type: 'jeepDamage', 
+                        x: enemy.x, 
+                        z: enemy.z,
+                        enemyType: enemy.type 
+                    });
                     if (enemy.type === 'killer') {
                         enemiesToRemove.add(enemy.id); // Killers explode on contact
                     }
@@ -398,7 +408,13 @@ class GameRoom {
                         // Player takes damage
                         if (!this.playerHealth[id]) this.playerHealth[id] = 100;
                         this.playerHealth[id] = Math.max(0, this.playerHealth[id] - 20);
-                        this.pendingEvents.push({ type: 'playerDamage', playerId: id });
+                        this.pendingEvents.push({ 
+                            type: 'playerDamage', 
+                            playerId: id,
+                            x: enemy.x,
+                            z: enemy.z,
+                            enemyType: enemy.type
+                        });
                         if (enemy.type === 'killer') {
                             enemiesToRemove.add(enemy.id); // Killers explode
                         }
@@ -427,9 +443,9 @@ class GameRoom {
             this.loseReason = 'All players have been eliminated!';
         }
         
-        // Spawn enemies as car progresses (more aggressive spawning, up to 50 max)
-        // Spawn enemies frequently - up to 50 max
-        if (Math.random() < 0.04 && this.enemies.length < 50) {
+        // Spawn enemies as car progresses (gradual spawning, up to 50 max)
+        // Lower spawn rate to avoid overwhelming at start
+        if (Math.random() < 0.015 && this.enemies.length < 50) {
             this.spawnEnemy();
         }
         
@@ -881,13 +897,13 @@ setInterval(() => {
         room.lastUpdate = now;
         room.update(delta);
         
-        // Emit damage events (for SFX)
+        // Emit damage events (for SFX and visual effects)
         const events = room.flushEvents();
         for (const event of events) {
             if (event.type === 'jeepDamage') {
-                io.to(room.code).emit('jeepDamage');
+                io.to(room.code).emit('jeepDamage', { x: event.x, z: event.z, enemyType: event.enemyType });
             } else if (event.type === 'playerDamage' && event.playerId) {
-                io.to(event.playerId).emit('playerDamage');
+                io.to(event.playerId).emit('playerDamage', { x: event.x, z: event.z, enemyType: event.enemyType });
             }
         }
         

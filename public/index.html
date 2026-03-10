@@ -506,6 +506,7 @@
         let lastEnterExitTime = 0; // Cooldown for enter/exit to prevent flickering
         let lastShootTime = 0; // Cooldown for shooting
         let grabRangeRing; // Visual indicator for grab range
+        let goalArrow3D, guntherArrow3D, guntherDistLabel; // 3D HUD arrows
         let gunViewModel; // First person gun model
         
         const keys = {};
@@ -1304,40 +1305,113 @@
             scene.add(grabRangeRing);
         }
         
+        function create3DArrow(color, scale = 1) {
+            const arrow = new THREE.Group();
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+            
+            // Arrow body (cone pointing forward)
+            const cone = new THREE.Mesh(
+                new THREE.ConeGeometry(0.08 * scale, 0.25 * scale, 8),
+                mat
+            );
+            cone.rotation.x = Math.PI / 2;
+            cone.position.z = 0.12 * scale;
+            arrow.add(cone);
+            
+            // Arrow shaft
+            const shaft = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.03 * scale, 0.03 * scale, 0.15 * scale, 8),
+                mat
+            );
+            shaft.rotation.x = Math.PI / 2;
+            shaft.position.z = -0.05 * scale;
+            arrow.add(shaft);
+            
+            return arrow;
+        }
+        
+        function initHUDArrows() {
+            // Goal arrow (green)
+            goalArrow3D = create3DArrow(0x00ff00, 1);
+            scene.add(goalArrow3D);
+            
+            // Gunther arrow (yellow)
+            guntherArrow3D = create3DArrow(0xffeb3b, 0.8);
+            guntherArrow3D.visible = false;
+            scene.add(guntherArrow3D);
+            
+            // Hide HTML arrows
+            const htmlGoal = document.getElementById('goal-arrow');
+            const htmlGunther = document.getElementById('gunther-arrow');
+            if (htmlGoal) htmlGoal.style.display = 'none';
+            if (htmlGunther) htmlGunther.style.display = 'none';
+        }
+        
         function updateHUDArrows() {
-            if (!player || !goal || !gameStarted) return;
+            if (!camera || !goal || !gameStarted) return;
+            if (!goalArrow3D) initHUDArrows();
             
-            const goalArrow = document.getElementById('goal-arrow');
-            const guntherArrowEl = document.getElementById('gunther-arrow');
-            if (!goalArrow || !guntherArrowEl) return;
+            // Get camera position and direction
+            const camPos = camera.position.clone();
+            const camDir = new THREE.Vector3();
+            camera.getWorldDirection(camDir);
             
-            // Goal arrow - always visible, points toward goal
-            const goalDx = goal.position.x - player.position.x;
-            const goalDz = goal.position.z - player.position.z;
-            const goalAngle = Math.atan2(goalDx, goalDz);
-            const relativeGoalAngle = goalAngle - playerRotation;
-            goalArrow.querySelector('.arrow').style.transform = `rotate(${-relativeGoalAngle}rad)`;
-            goalArrow.style.display = 'block';
+            // Position arrows in front of camera
+            const arrowDistance = 2;
+            const basePos = camPos.clone().add(camDir.clone().multiplyScalar(arrowDistance));
             
-            // Gunther arrow - only visible when out of car and not being held
+            // Goal arrow - always visible, top of view
+            const goalArrowPos = basePos.clone();
+            goalArrowPos.y += 0.5;
+            goalArrow3D.position.copy(goalArrowPos);
+            
+            // Calculate direction to goal from camera
+            const toGoal = new THREE.Vector3(
+                goal.position.x - camPos.x,
+                0,
+                goal.position.z - camPos.z
+            ).normalize();
+            goalArrow3D.lookAt(goalArrowPos.clone().add(toGoal));
+            goalArrow3D.visible = true;
+            
+            // Gunther arrow - only when wandering
             const guntherVisible = serverState && 
                 serverState.gunther.state !== 'in_car' && 
                 serverState.gunther.state !== 'carried' &&
                 !guntherHoldingHands;
             
-            if (guntherVisible && gunther) {
-                const gDx = serverState.gunther.x - player.position.x;
-                const gDz = serverState.gunther.z - player.position.z;
-                const guntherAngle = Math.atan2(gDx, gDz);
-                const relativeGuntherAngle = guntherAngle - playerRotation;
-                const guntherDist = Math.hypot(gDx, gDz);
+            if (guntherVisible && serverState) {
+                const guntherArrowPos = basePos.clone();
+                guntherArrowPos.y += 0.25;
+                guntherArrow3D.position.copy(guntherArrowPos);
                 
-                guntherArrowEl.querySelector('.arrow').style.transform = `rotate(${-relativeGuntherAngle}rad)`;
-                guntherArrowEl.querySelector('.distance').textContent = `${Math.round(guntherDist)}m`;
-                guntherArrowEl.style.display = 'block';
+                const toGunther = new THREE.Vector3(
+                    serverState.gunther.x - camPos.x,
+                    0,
+                    serverState.gunther.z - camPos.z
+                );
+                const guntherDist = toGunther.length();
+                toGunther.normalize();
+                
+                guntherArrow3D.lookAt(guntherArrowPos.clone().add(toGunther));
+                guntherArrow3D.visible = true;
+                
+                // Update distance in HTML (keep the text display)
+                const distEl = document.getElementById('gunther-arrow');
+                if (distEl) {
+                    distEl.style.display = 'block';
+                    distEl.querySelector('.arrow').style.display = 'none';
+                    distEl.querySelector('.distance').textContent = `${Math.round(guntherDist)}m`;
+                }
             } else {
-                guntherArrowEl.style.display = 'none';
+                guntherArrow3D.visible = false;
+                const distEl = document.getElementById('gunther-arrow');
+                if (distEl) distEl.style.display = 'none';
             }
+            
+            // Hide HTML goal arrow (using 3D now)
+            const htmlGoal = document.getElementById('goal-arrow');
+            if (htmlGoal) htmlGoal.style.display = 'none';
         }
         
         function updateGrabRangeRing() {

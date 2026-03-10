@@ -78,12 +78,12 @@
         }
         #goal-arrow .arrow { font-size: 32px; }
         #gunther-arrow {
-            top: 50px; left: 50%; transform: translateX(-50%);
+            top: 95px; left: 50%; transform: translateX(-50%);
             color: #ffeb3b;
             display: none;
         }
         #gunther-arrow .arrow { font-size: 28px; display: none; }
-        #gunther-arrow .distance { font-size: 18px; color: #fff; font-weight: bold; margin-top: -5px; }
+        #gunther-arrow .distance { font-size: 18px; color: #fff; font-weight: bold; margin-top: 0px; }
         
         /* Health bars */
         #health-bars {
@@ -561,6 +561,45 @@
                 gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
                 osc.start();
                 osc.stop(ctx.currentTime + 0.1);
+            },
+            
+            jeepDamage: () => {
+                const ctx = initAudio();
+                // Heavy metallic crunch sound
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const noise = ctx.createOscillator();
+                osc.type = 'square';
+                noise.type = 'sawtooth';
+                osc.connect(gain);
+                noise.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(100, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.2);
+                noise.frequency.setValueAtTime(200, ctx.currentTime);
+                noise.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                osc.start();
+                noise.start();
+                osc.stop(ctx.currentTime + 0.2);
+                noise.stop(ctx.currentTime + 0.2);
+            },
+            
+            playerDamage: () => {
+                const ctx = initAudio();
+                // Pain grunt / hurt sound
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(300, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.15);
             }
         };
         // ===== END SOUND EFFECTS =====
@@ -863,6 +902,14 @@
                     createBloodExplosion(mesh.position.x, mesh.position.y, mesh.position.z);
                 }
             }
+        });
+        
+        socket.on('jeepDamage', () => {
+            SFX.jeepDamage();
+        });
+        
+        socket.on('playerDamage', () => {
+            SFX.playerDamage();
         });
         
         function startGame() { socket.emit('startGame'); }
@@ -1700,10 +1747,10 @@
             if (!grabRangeRing || !player) return;
             
             // Show ring when player is on foot and Gunther is grabbable
-            const guntherGrabbable = serverState && 
+            // Note: 'carried' means someone is already holding him, so NOT grabbable
+            const guntherGrabbable = serverState && serverState.gunther &&
                 (serverState.gunther.state === 'wandering' || 
-                 serverState.gunther.state === 'trapped' ||
-                 serverState.gunther.state === 'carried');
+                 serverState.gunther.state === 'trapped');
             
             if (!isInCar && guntherGrabbable) {
                 grabRangeRing.visible = true;
@@ -2609,7 +2656,7 @@
                         gunViewModel.position.z += forward.z * 0.5 + right.z * 0.3;
                         gunViewModel.position.y -= 0.3;
                         gunViewModel.rotation.order = 'YXZ';
-                        gunViewModel.rotation.x = cameraPitch;
+                        gunViewModel.rotation.x = -cameraPitch; // Negated so looking up points gun up
                         gunViewModel.rotation.y = playerRotation;
                     }
                 }

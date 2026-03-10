@@ -102,8 +102,8 @@ class GameRoom {
     
     start() {
         this.gameState = 'playing';
-        // Spawn initial enemies along the route
-        for (let i = 0; i < 10; i++) {
+        // Spawn initial enemies along the route (start with 20)
+        for (let i = 0; i < 20; i++) {
             this.spawnEnemy();
         }
     }
@@ -117,7 +117,8 @@ class GameRoom {
         const baseSpeed = this.config.enemySpeed;
         // 40% chance to spawn a killer, 60% stealer
         const type = Math.random() < 0.4 ? 'killer' : 'stealer';
-        const speedMult = type === 'killer' ? 1.5 : 1.0; // Killers are faster
+        // Stealers are now faster (1.5x), killers even faster (1.8x)
+        const speedMult = type === 'killer' ? 1.8 : 1.5;
         const enemy = {
             id: this.enemyIdCounter++,
             type: type,
@@ -127,7 +128,7 @@ class GameRoom {
             vz: 0,
             health: 2,
             hasGunther: false,
-            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.3  // 30% faster overall
+            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.5  // 50% faster overall
         };
         this.enemies.push(enemy);
         return enemy;
@@ -260,20 +261,16 @@ class GameRoom {
         }
         
         // Enemy AI
-        const ENEMY_DETECTION_RANGE = 50; // Only chase if within this range of car
+        const ENEMY_DETECTION_RANGE = 80; // Increased range - only chase if within this range
         
         for (const enemy of this.enemies) {
             const guntherVulnerable = this.gunther.state === 'wandering' || this.gunther.state === 'trapped';
             
-            // Check if enemy is close enough to the car to be "active"
+            // Check if enemy is close enough to be "active" - consider car, Gunther, and players
             const distToCar = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
-            const inRange = distToCar < ENEMY_DETECTION_RANGE;
+            const distToGunther = Math.hypot(enemy.x - this.gunther.x, enemy.z - this.gunther.z);
             
-            // Reset velocity each frame (will be set below if moving)
-            enemy.vx = 0;
-            enemy.vz = 0;
-            
-            // Find closest player for killers
+            // Find closest player for killers AND for activation check
             let closestPlayer = null;
             let closestPlayerDist = Infinity;
             for (const [id, p] of this.players) {
@@ -285,6 +282,15 @@ class GameRoom {
                     }
                 }
             }
+            
+            // Enemy is active if close to car, Gunther, OR any player
+            const inRange = distToCar < ENEMY_DETECTION_RANGE || 
+                           distToGunther < ENEMY_DETECTION_RANGE || 
+                           closestPlayerDist < ENEMY_DETECTION_RANGE;
+            
+            // Reset velocity each frame (will be set below if moving)
+            enemy.vx = 0;
+            enemy.vz = 0;
             
             if (enemy.type === 'stealer') {
                 // STEALERS: chase Gunther to steal him
@@ -347,10 +353,13 @@ class GameRoom {
         
         // Enemy collision damage
         const enemiesToRemove = new Set();
+        // Track damage events for SFX
+        if (!this.pendingEvents) this.pendingEvents = [];
+        
         for (const enemy of this.enemies) {
             // Check collision with jeep (side/back hits damage jeep)
             const distToCar = Math.hypot(enemy.x - this.car.x, enemy.z - this.car.z);
-            if (distToCar < 3 && !this.car.disabled) {
+            if (distToCar < 3 && !this.car.disabled && !enemy.hitJeepThisFrame) {
                 // Check if it's a front hit (jeep runs them over) or side/back hit
                 const carForward = { x: Math.sin(this.car.rotation), z: Math.cos(this.car.rotation) };
                 const toEnemy = { x: enemy.x - this.car.x, z: enemy.z - this.car.z };
@@ -360,7 +369,9 @@ class GameRoom {
                     // Front hit - enemy dies (handled by client roadkill)
                 } else {
                     // Side/back hit - enemy damages jeep
+                    enemy.hitJeepThisFrame = true; // Prevent multiple hits per frame
                     this.car.health = Math.max(0, this.car.health - 15);
+                    this.pendingEvents.push({ type: 'jeepDamage' });
                     if (enemy.type === 'killer') {
                         enemiesToRemove.add(enemy.id); // Killers explode on contact
                     }
@@ -383,16 +394,24 @@ class GameRoom {
             for (const [id, p] of this.players) {
                 if (!p.inCar) {
                     const distToPlayer = Math.hypot(enemy.x - p.x, enemy.z - p.z);
-                    if (distToPlayer < 2) {
+                    if (distToPlayer < 2 && !enemy.hitPlayerThisFrame) {
+                        enemy.hitPlayerThisFrame = true; // Prevent multiple hits per frame
                         // Player takes damage
                         if (!this.playerHealth[id]) this.playerHealth[id] = 100;
                         this.playerHealth[id] = Math.max(0, this.playerHealth[id] - 20);
+                        this.pendingEvents.push({ type: 'playerDamage', playerId: id });
                         if (enemy.type === 'killer') {
                             enemiesToRemove.add(enemy.id); // Killers explode
                         }
                     }
                 }
             }
+        }
+        
+        // Reset hit flags
+        for (const enemy of this.enemies) {
+            enemy.hitJeepThisFrame = false;
+            enemy.hitPlayerThisFrame = false;
         }
         
         // Remove exploded killers
@@ -409,8 +428,8 @@ class GameRoom {
             this.loseReason = 'All players have been eliminated!';
         }
         
-        // Spawn enemies as car progresses
-        if (Math.random() < 0.012 && this.enemies.length < 15) {
+        // Spawn enemies as car progresses (more aggressive spawning, up to 50 max)
+        if (Math.random() < 0.02 && this.enemies.length < 50) {
             this.spawnEnemy();
         }
         
@@ -439,48 +458,35 @@ class GameRoom {
         const player = this.players.get(playerId);
         if (!player || player.inCar) return false;
         
-        if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped' || this.gunther.state === 'carried') {
+        // If Gunther is wandering or trapped, pick him up
+        if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped') {
             const dist = Math.hypot(player.x - this.gunther.x, player.z - this.gunther.z);
-            // If carried, we can put him in car from further away
-            const grabDist = this.gunther.state === 'carried' ? 6 : 4;
-            if (dist < grabDist) {
-                // Must be close to car too
-                const carDist = Math.hypot(player.x - this.car.x, player.z - this.car.z);
-                if (carDist < 8) {
-                    const wasTrapped = this.gunther.state === 'trapped';
-                    const wasCarried = this.gunther.state === 'carried';
-                    this.gunther.state = 'in_car';
-                    this.gunther.visible = false;
-                    this.gunther.trapPos = null;
-                    this.gunther.holderId = null;
-                    this.lastQuote = wasTrapped ? "Ach! You freed me from ze fun snappy thing!" : 
-                                     wasCarried ? "Zank you for ze ride! But I vas having fun up zere!" :
-                                     "Nein! Ze adventure vas just beginning!";
-                    // Check win immediately when Gunther enters car
-                    const goalDist = Math.hypot(this.car.x, this.car.z - GOAL_Z);
-                    if (goalDist <= 12) {
-                        this.gameState = 'won';
-                    }
-                    return true;
-                }
+            if (dist < 4) {
+                const wasTrapped = this.gunther.state === 'trapped';
+                this.gunther.state = 'carried';
+                this.gunther.holderId = playerId;
+                this.gunther.trapPos = null;
+                this.lastQuote = wasTrapped ? "Ach! You freed me from ze snappy thing!" : 
+                                 "Wheee! I am flying! Like a beautiful German eagle!";
+                return true;
             }
         }
         return false;
     }
     
-    grabGunther(playerId) {
-        const player = this.players.get(playerId);
-        if (!player || player.inCar) return false;
-        
-        if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped') {
-            const dist = Math.hypot(player.x - this.gunther.x, player.z - this.gunther.z);
-            if (dist < 4) {
-                this.gunther.state = 'carried';
-                this.gunther.holderId = playerId;
-                this.gunther.trapPos = null;
-                this.lastQuote = "Wheee! I am flying! Like a beautiful German eagle!";
-                return true;
+    // Put Gunther in car while carrying him (called when entering car while carrying)
+    putGuntherInCar(playerId) {
+        if (this.gunther.state === 'carried' && this.gunther.holderId === playerId) {
+            this.gunther.state = 'in_car';
+            this.gunther.visible = false;
+            this.gunther.holderId = null;
+            this.lastQuote = "Zank you for ze ride! But I vas having fun up zere!";
+            // Check win immediately when Gunther enters car
+            const goalDist = Math.hypot(this.car.x, this.car.z - GOAL_Z);
+            if (goalDist <= 12) {
+                this.gameState = 'won';
             }
+            return true;
         }
         return false;
     }
@@ -641,6 +647,13 @@ class GameRoom {
             jeepHealth: this.car.health,
             jeepDisabled: this.car.disabled
         };
+    }
+    
+    // Get and clear pending events (damage sounds, etc.)
+    flushEvents() {
+        const events = this.pendingEvents || [];
+        this.pendingEvents = [];
+        return events;
     }
 }
 
@@ -867,6 +880,17 @@ setInterval(() => {
         const delta = (now - room.lastUpdate) / 1000;
         room.lastUpdate = now;
         room.update(delta);
+        
+        // Emit damage events (for SFX)
+        const events = room.flushEvents();
+        for (const event of events) {
+            if (event.type === 'jeepDamage') {
+                io.to(room.code).emit('jeepDamage');
+            } else if (event.type === 'playerDamage' && event.playerId) {
+                io.to(event.playerId).emit('playerDamage');
+            }
+        }
+        
         io.to(room.code).emit('gameState', room.getState());
     });
 }, 1000 / 20); // 20 FPS server tick

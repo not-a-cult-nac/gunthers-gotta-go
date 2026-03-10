@@ -2087,6 +2087,14 @@
         
         document.addEventListener('pointerlockchange', () => {
             if (!document.pointerLockElement && gameStarted && !isMobile) {
+                // Pointer lock lost - will re-request on next click
+                console.log('Pointer lock lost - click to recapture');
+            }
+        });
+        
+        // Re-capture pointer on any click during gameplay
+        document.addEventListener('click', () => {
+            if (gameStarted && !isMobile && !document.pointerLockElement) {
                 document.body.requestPointerLock();
             }
         });

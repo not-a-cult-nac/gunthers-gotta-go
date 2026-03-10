@@ -1853,9 +1853,11 @@
             
             // Show ring when player is on foot and Gunther is grabbable
             // Note: 'carried' means someone is already holding him, so NOT grabbable
+            // 'captured' means enemy has him - player CAN rescue him!
             const guntherGrabbable = serverState && serverState.gunther &&
                 (serverState.gunther.state === 'wandering' || 
-                 serverState.gunther.state === 'trapped');
+                 serverState.gunther.state === 'trapped' ||
+                 serverState.gunther.state === 'captured');
             
             if (!isInCar && guntherGrabbable) {
                 grabRangeRing.visible = true;

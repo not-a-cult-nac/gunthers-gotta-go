@@ -73,7 +73,7 @@ class GameRoom {
         this.code = code;
         this.players = new Map();
         this.driver = null;
-        this.car = { x: 0, z: START_Z, rotation: 0, health: 100, disabled: false };
+        this.car = { x: 0, z: START_Z, rotation: 0, health: 150, disabled: false }; // 50% more health
         this.gunther = { x: 0, z: START_Z, state: 'in_car', visible: false, captorId: null, trapPos: null, holderId: null };
         this.enemies = [];
         this.gameState = 'waiting';
@@ -85,7 +85,7 @@ class GameRoom {
         
         // Debug config (can be adjusted via debug panel)
         this.config = {
-            escapeRate: 0.015,      // Probability per second of random escape (reduced from 0.05)
+            escapeRate: 0.025,      // Probability per second of random escape (slightly increased)
             lureRange: 12,          // Distance at which enemies lure Gunther out
             enemySpeed: 5,          // Base enemy movement speed (faster!)
             guntherSpeed: 3.5       // Gunther wander speed
@@ -383,9 +383,8 @@ class GameRoom {
                         z: enemy.z,
                         enemyType: enemy.type 
                     });
-                    if (enemy.type === 'killer') {
-                        enemiesToRemove.add(enemy.id); // Killers explode on contact
-                    }
+                    // ALL enemies die after dealing damage (kamikaze)
+                    enemiesToRemove.add(enemy.id);
                     if (this.car.health <= 0 && !this.car.disabled) {
                         this.car.disabled = true;
                         // Eject everyone from jeep
@@ -422,9 +421,8 @@ class GameRoom {
                             this.gameState = 'lost';
                             this.loseReason = 'You were overwhelmed by the enemies!';
                         }
-                        if (enemy.type === 'killer') {
-                            enemiesToRemove.add(enemy.id); // Killers explode
-                        }
+                        // ALL enemies die after dealing damage (kamikaze)
+                        enemiesToRemove.add(enemy.id);
                     }
                 }
             }
@@ -489,9 +487,9 @@ class GameRoom {
             this.loseReason = 'All players have been eliminated!';
         }
         
-        // Spawn enemies as car progresses (gradual spawning, up to 50 max)
-        // Lower spawn rate to avoid overwhelming at start
-        if (Math.random() < 0.015 && this.enemies.length < 50) {
+        // Spawn enemies continuously up to 50 max (steady flow)
+        // Higher spawn rate to replace killed enemies
+        if (Math.random() < 0.025 && this.enemies.length < 50) {
             this.spawnEnemy();
         }
         
@@ -520,15 +518,25 @@ class GameRoom {
         const player = this.players.get(playerId);
         if (!player || player.inCar) return false;
         
-        // If Gunther is wandering or trapped, pick him up
-        if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped') {
+        // If Gunther is wandering, trapped, OR captured by enemy - pick him up
+        if (this.gunther.state === 'wandering' || this.gunther.state === 'trapped' || this.gunther.state === 'captured') {
             const dist = Math.hypot(player.x - this.gunther.x, player.z - this.gunther.z);
             if (dist < 4) {
                 const wasTrapped = this.gunther.state === 'trapped';
+                const wasCaptured = this.gunther.state === 'captured';
+                
+                // If captured, free him from the enemy
+                if (wasCaptured && this.gunther.captorId !== null) {
+                    const captor = this.enemies.find(e => e.id === this.gunther.captorId);
+                    if (captor) captor.hasGunther = false;
+                    this.gunther.captorId = null;
+                }
+                
                 this.gunther.state = 'carried';
                 this.gunther.holderId = playerId;
                 this.gunther.trapPos = null;
                 this.lastQuote = wasTrapped ? "Ach! You freed me from ze snappy thing!" : 
+                                 wasCaptured ? "You saved me! But zey had ze best candies!" :
                                  "Wheee! I am flying! Like a beautiful German eagle!";
                 return true;
             }

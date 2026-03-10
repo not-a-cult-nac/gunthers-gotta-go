@@ -85,6 +85,45 @@
         #gunther-arrow .arrow { font-size: 28px; display: none; }
         #gunther-arrow .distance { font-size: 20px; color: #fff; font-weight: bold; }
         
+        /* Health bars */
+        #health-bars {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 50;
+        }
+        .health-bar-container {
+            width: 180px;
+            height: 20px;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid #fff;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .health-bar-container label {
+            position: absolute;
+            font-size: 11px;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+            margin-left: 5px;
+            margin-top: 2px;
+        }
+        #jeep-health-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #00aa00, #00ff00);
+            width: 100%;
+            transition: width 0.2s;
+        }
+        #player-health-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #aa0000, #ff4444);
+            width: 100%;
+            transition: width 0.2s;
+        }
+        
         /* Boost bar */
         #boost-bar-container {
             position: absolute;
@@ -252,6 +291,16 @@
     <div id="boost-bar-container">
         <div id="boost-bar"></div>
         <div id="boost-text">BOOST READY</div>
+    </div>
+    <div id="health-bars">
+        <div class="health-bar-container">
+            <label>JEEP</label>
+            <div id="jeep-health-bar"></div>
+        </div>
+        <div class="health-bar-container">
+            <label>PLAYER</label>
+            <div id="player-health-bar"></div>
+        </div>
     </div>
     
     <div id="debug-panel">
@@ -555,6 +604,13 @@
         let lastExitCarTime = 0; // Track when player left jeep
         const BOOST_DURATION = 3000;  // 3 seconds
         const BOOST_COOLDOWN = 5000;  // 5 seconds
+        
+        // Health state
+        let jeepHealth = 100;
+        let playerHealth = 100;
+        let jeepDisabled = false;
+        let jeepSmoke = null; // Smoke particle system
+        let lastDamageTime = 0; // Damage cooldown
         let grabRangeRing; // Visual indicator for grab range
         let goalArrow3D, guntherArrow3D, guntherDistLabel; // 3D HUD arrows
         let gunViewModel; // First person gun model
@@ -1550,6 +1606,62 @@
             }
         }
         
+        function createJeepSmoke() {
+            if (jeepSmoke) return; // Already exists
+            jeepSmoke = new THREE.Group();
+            scene.add(jeepSmoke);
+        }
+        
+        function updateJeepSmoke() {
+            if (!jeepSmoke || !car) return;
+            jeepSmoke.position.copy(car.position);
+            jeepSmoke.position.y += 2;
+            
+            // Add smoke particles
+            if (jeepHealth <= 33 && Math.random() < 0.3) {
+                const smoke = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.3 + Math.random() * 0.4),
+                    new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.6 })
+                );
+                smoke.position.set((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2);
+                smoke.userData.life = 60;
+                jeepSmoke.add(smoke);
+            }
+            
+            // Update existing particles
+            for (let i = jeepSmoke.children.length - 1; i >= 0; i--) {
+                const p = jeepSmoke.children[i];
+                p.position.y += 0.05;
+                p.material.opacity -= 0.01;
+                p.userData.life--;
+                if (p.userData.life <= 0) jeepSmoke.remove(p);
+            }
+        }
+        
+        function updateHealthBars() {
+            const container = document.getElementById('health-bars');
+            const jeepBar = document.getElementById('jeep-health-bar');
+            const playerBar = document.getElementById('player-health-bar');
+            
+            if (!container || !jeepBar || !playerBar) return;
+            
+            container.style.display = gameStarted ? 'flex' : 'none';
+            
+            jeepBar.style.width = jeepHealth + '%';
+            if (jeepHealth <= 33) {
+                jeepBar.style.background = 'linear-gradient(90deg, #aa0000, #ff0000)';
+            } else if (jeepHealth <= 66) {
+                jeepBar.style.background = 'linear-gradient(90deg, #aaaa00, #ffff00)';
+            } else {
+                jeepBar.style.background = 'linear-gradient(90deg, #00aa00, #00ff00)';
+            }
+            
+            playerBar.style.width = playerHealth + '%';
+            if (playerHealth <= 33) {
+                playerBar.style.background = 'linear-gradient(90deg, #aa0000, #ff0000)';
+            }
+        }
+        
         function createBloodExplosion(x, y, z) {
             const particleCount = 20;
             const particles = [];
@@ -1933,12 +2045,17 @@
             }
         }
         
-        function createEnemy(id) {
+        function createEnemy(id, type = 'stealer') {
             const enemy = new THREE.Group();
+            enemy.userData.type = type;
+            
+            // Killers are red/orange, Stealers are dark red/purple
+            const bodyColor = type === 'killer' ? 0xff4400 : 0x660066;
+            const hoodColor = type === 'killer' ? 0x220000 : 0x111111;
             
             const body = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.4, 0.5, 1.6),
-                new THREE.MeshStandardMaterial({ color: 0x880000 })
+                new THREE.MeshStandardMaterial({ color: bodyColor })
             );
             body.position.y = 1;
             enemy.add(body);
@@ -1949,17 +2066,28 @@
             
             const hood = new THREE.Mesh(
                 new THREE.ConeGeometry(0.4, 0.6, 8),
-                new THREE.MeshStandardMaterial({ color: 0x111111 })
+                new THREE.MeshStandardMaterial({ color: hoodColor })
             );
             hood.position.y = 2.3;
             enemy.add(hood);
             
-            const bag = new THREE.Mesh(
-                new THREE.BoxGeometry(0.35, 0.35, 0.35),
-                new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff1493, emissiveIntensity: 0.2 })
-            );
-            bag.position.set(0.45, 1.3, 0);
-            enemy.add(bag);
+            if (type === 'stealer') {
+                // Candy bag for stealers
+                const bag = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.35, 0.35, 0.35),
+                    new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff1493, emissiveIntensity: 0.2 })
+                );
+                bag.position.set(0.45, 1.3, 0);
+                enemy.add(bag);
+            } else {
+                // Explosive vest for killers (glowing)
+                const vest = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.6, 0.4, 0.3),
+                    new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.5 })
+                );
+                vest.position.set(0, 1.2, 0.25);
+                enemy.add(vest);
+            }
             
             scene.add(enemy);
             enemyMeshes.set(id, enemy);
@@ -1967,6 +2095,19 @@
         }
         
         function updateFromServer(state) {
+            // Update health from server
+            if (state.jeepHealth !== undefined) jeepHealth = state.jeepHealth;
+            if (state.jeepDisabled !== undefined) jeepDisabled = state.jeepDisabled;
+            
+            // Find our player's health
+            if (state.players && socket) {
+                const me = state.players.find(p => p.id === socket.id);
+                if (me && me.health !== undefined) playerHealth = me.health;
+            }
+            
+            // Create smoke if jeep is damaged
+            if (jeepHealth <= 33 && !jeepSmoke) createJeepSmoke();
+            
             // Car - only update from server if we're NOT in the car (let driver be authoritative)
             if (car && state.car) {
                 if (!isInCar) {
@@ -2081,7 +2222,7 @@
             
             for (const e of state.enemies) {
                 let mesh = enemyMeshes.get(e.id);
-                if (!mesh) mesh = createEnemy(e.id);
+                if (!mesh) mesh = createEnemy(e.id, e.type || 'stealer');
                 mesh.position.x = e.x;
                 mesh.position.z = e.z;
                 mesh.position.y = getTerrainHeight(e.x, e.z);
@@ -2290,8 +2431,8 @@
             }
             
             if (isInCar) {
-                // Only the driver can control the car
-                if (isDriver) {
+                // Only the driver can control the car (and jeep must not be disabled)
+                if (isDriver && !jeepDisabled) {
                     // Handle boost
                     const now = Date.now();
                     if (GameInput.consumeAction('boost') && !boostActive && now >= boostCooldownEnd) {
@@ -2470,7 +2611,7 @@
                         gunViewModel.position.x += forward.x * 0.5 + right.x * 0.3;
                         gunViewModel.position.z += forward.z * 0.5 + right.z * 0.3;
                         gunViewModel.position.y -= 0.3;
-                        gunViewModel.rotation.set(-cameraPitch, playerRotation, 0); // Pitch gun with camera
+                        gunViewModel.rotation.set(cameraPitch, playerRotation, 0); // Pitch gun with camera
                     }
                 }
             }
@@ -2558,6 +2699,8 @@
             updateHandLink();
             updateHUDArrows();
             updateBoostBar(Date.now()); // Update boost bar (handles reset when outside car)
+            updateHealthBars();
+            updateJeepSmoke();
             
             // Reset input deltas
             if (typeof GameInput !== 'undefined') GameInput.resetDeltas();

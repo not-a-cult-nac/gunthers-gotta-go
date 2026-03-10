@@ -662,25 +662,41 @@
             { x: 15, z: 400, type: 'trap', radius: 2 },
         ];
         
+        // Winding path through terrain - returns X offset for the path at given Z
+        function getPathX(z) {
+            // Create a winding path using multiple sine waves
+            const curve1 = Math.sin(z * 0.015) * 25;
+            const curve2 = Math.sin(z * 0.008 + 1.5) * 15;
+            const curve3 = Math.sin(z * 0.025 + 0.7) * 10;
+            return curve1 + curve2 + curve3;
+        }
+        
         function getTerrainHeight(x, z) {
             // More dramatic terrain with hills, valleys, and cliffs
-            const bigHills = Math.sin(x * 0.012) * Math.cos(z * 0.01) * 10;
-            const ridges = Math.sin(x * 0.025 + z * 0.015) * 6;
-            const mediumHills = Math.sin(x * 0.05 + 2) * Math.cos(z * 0.04) * 4;
-            const smallBumps = Math.sin(x * 0.1) * Math.sin(z * 0.12) * 1.5;
-            const valleys = -Math.abs(Math.sin(x * 0.018) * Math.cos(z * 0.022)) * 5;
+            const bigHills = Math.sin(x * 0.012) * Math.cos(z * 0.01) * 12;
+            const ridges = Math.sin(x * 0.025 + z * 0.015) * 8;
+            const mediumHills = Math.sin(x * 0.05 + 2) * Math.cos(z * 0.04) * 5;
+            const smallBumps = Math.sin(x * 0.1) * Math.sin(z * 0.12) * 2;
+            const valleys = -Math.abs(Math.sin(x * 0.018) * Math.cos(z * 0.022)) * 6;
             
-            // Cliff-like features on the sides
-            const cliffLeft = x < -40 ? Math.pow(Math.abs(x + 40) * 0.1, 1.5) : 0;
-            const cliffRight = x > 40 ? Math.pow(Math.abs(x - 40) * 0.1, 1.5) : 0;
+            // Cliff-like features on the far sides
+            const cliffLeft = x < -55 ? Math.pow(Math.abs(x + 55) * 0.12, 1.5) : 0;
+            const cliffRight = x > 55 ? Math.pow(Math.abs(x - 55) * 0.12, 1.5) : 0;
             
             let height = bigHills + ridges + mediumHills + smallBumps + valleys + cliffLeft + cliffRight;
             
-            // Keep a drivable corridor down the center (-25 to +25)
-            const centerDist = Math.abs(x);
-            if (centerDist < 25) {
-                const centerFlatness = 1 - (centerDist / 25);
-                height *= (1 - centerFlatness * 0.8);
+            // Create a winding drivable path through the terrain
+            const pathX = getPathX(z);
+            const distFromPath = Math.abs(x - pathX);
+            const pathWidth = 18; // Width of the drivable corridor
+            
+            if (distFromPath < pathWidth) {
+                // Smooth falloff from path center
+                const pathInfluence = 1 - (distFromPath / pathWidth);
+                const smoothInfluence = pathInfluence * pathInfluence * (3 - 2 * pathInfluence); // Smoothstep
+                height *= (1 - smoothInfluence * 0.85);
+                // Add slight bumps on the path for texture
+                height += Math.sin(x * 0.3) * Math.sin(z * 0.25) * 0.3 * (1 - smoothInfluence);
             }
             
             // Ensure minimum height of 0

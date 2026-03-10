@@ -15,6 +15,8 @@ const GameInput = {
     _enterExit: false,
     _holdHand: false,
     _releaseHand: false,
+    _jump: false,
+    _jump: false,
     
     // AI can set custom shoot direction (dirX, dirZ)
     shootDirection: null,
@@ -53,6 +55,7 @@ const GameInput = {
         this._enterExit = false;
         this._holdHand = false;
         this._releaseHand = false;
+        this._jump = false;
     }
 };
 

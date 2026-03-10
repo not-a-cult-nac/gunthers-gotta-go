@@ -207,7 +207,7 @@
     </div>
     
     <div id="instructions">
-        CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | E Exit/Enter | SPACE Hold/Release Hand
+        CAR: W/S Drive, A/D Turn | ON FOOT: WASD + Mouse Aim | CLICK Shoot | RIGHT-CLICK Grab/Toss | SPACE Jump | E Exit/Enter
     </div>
     <!-- Mobile Touch Controls -->
     <div id="mobile-controls" style="display: none;">
@@ -488,6 +488,8 @@
         let mouseX = 0, mouseY = 0;
         let carRotation = 0;
         let playerRotation = 0;
+        let playerVelocityY = 0;  // For jumping
+        let isOnGround = true;
         let lastQuote = '';
         
         const GOAL_Z = 440;
@@ -907,13 +909,14 @@
         }
         
         // Seat positions in the jeep (local coordinates)
+        // Car model faces -Z but drives toward +Z, so +Z is "front" for seating
         const SEAT_POSITIONS = [
-            { x: -0.7, y: 1.3, z: -0.8, label: 'driver' },      // Front left - driver
-            { x: 0.7, y: 1.3, z: -0.8, label: 'passenger' },    // Front right
-            { x: -0.7, y: 1.3, z: 1.2, label: 'back-left' },    // Back left
-            { x: 0.7, y: 1.3, z: 1.2, label: 'back-right' },    // Back right
+            { x: -0.7, y: 1.3, z: 1.2, label: 'driver' },       // Front left - driver (toward +Z driving direction)
+            { x: 0.7, y: 1.3, z: 1.2, label: 'passenger' },     // Front right
+            { x: -0.7, y: 1.3, z: -0.8, label: 'back-left' },   // Back left
+            { x: 0.7, y: 1.3, z: -0.8, label: 'back-right' },   // Back right
         ];
-        const GUNTHER_SEAT = { x: 0, y: 1.3, z: 1.2 };  // Middle back seat
+        const GUNTHER_SEAT = { x: 0, y: 1.3, z: -0.8 };  // Middle back seat
         
         let seatOccupants = {};  // playerId -> seat index
         
@@ -924,32 +927,33 @@
             const seatMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown seats
             
             // Main body - lower, open top jeep style
+            // Car faces +Z direction (hood at +Z, back at -Z)
             const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 5), bodyMat);
             chassis.position.y = 0.9;
             chassis.castShadow = true;
             car.add(chassis);
             
-            // Hood
+            // Hood (front, at +Z)
             const hood = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.4, 1.5), bodyMat);
-            hood.position.set(0, 1.4, -2);
+            hood.position.set(0, 1.4, 2);
             hood.castShadow = true;
             car.add(hood);
             
-            // Windshield frame
+            // Windshield frame (in front of driver seats)
             const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 0.1), metalMat);
-            windshield.position.set(0, 2, -1.2);
+            windshield.position.set(0, 2, 1.2);
             car.add(windshield);
             
-            // Roll bars
+            // Roll bars (behind seats, toward back)
             const rollBarMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            [[-1.3, 2.5, 0.5], [1.3, 2.5, 0.5]].forEach(([x, y, z]) => {
+            [[-1.3, 2.5, -0.5], [1.3, 2.5, -0.5]].forEach(([x, y, z]) => {
                 const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2), rollBarMat);
                 bar.position.set(x, y, z);
                 car.add(bar);
             });
             // Top bar
             const topBar = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, 0.1), rollBarMat);
-            topBar.position.set(0, 3.5, 0.5);
+            topBar.position.set(0, 3.5, -0.5);
             car.add(topBar);
             
             // Side walls (low)
@@ -960,59 +964,59 @@
             sideWall2.position.x = 1.5;
             car.add(sideWall2);
             
-            // Back wall
+            // Back wall (at -Z)
             const backWall = new THREE.Mesh(new THREE.BoxGeometry(3, 0.8, 0.15), bodyMat);
-            backWall.position.set(0, 1.5, 2.4);
+            backWall.position.set(0, 1.5, -2.4);
             car.add(backWall);
             
-            // Front seats
+            // Front seats (at +Z, using SEAT_POSITIONS)
             SEAT_POSITIONS.slice(0, 2).forEach((pos) => {
                 const seat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.8), seatMat);
                 seat.position.set(pos.x, pos.y - 0.3, pos.z);
                 car.add(seat);
                 const back = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.15), seatMat);
-                back.position.set(pos.x, pos.y + 0.1, pos.z + 0.4);
+                back.position.set(pos.x, pos.y + 0.1, pos.z - 0.4);  // Seat back behind player
                 car.add(back);
             });
             
-            // Back bench seat
+            // Back bench seat (at -Z)
             const backSeat = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 0.8), seatMat);
-            backSeat.position.set(0, 1, 1.2);
+            backSeat.position.set(0, 1, -1.2);
             car.add(backSeat);
             const backSeatBack = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.6, 0.15), seatMat);
-            backSeatBack.position.set(0, 1.4, 1.6);
+            backSeatBack.position.set(0, 1.4, -1.6);
             car.add(backSeatBack);
             
-            // Steering wheel (driver's side - front left)
+            // Steering wheel (driver's side - front left, facing +Z driving direction)
             const steeringMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            // Steering column
+            // Steering column - angled toward driver at front left
             const steeringColumn = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8),
                 steeringMat
             );
-            steeringColumn.rotation.x = -Math.PI / 6;  // Angled toward driver
-            steeringColumn.position.set(-0.7, 1.4, -1.3);
+            steeringColumn.rotation.x = Math.PI / 6;  // Angled toward driver
+            steeringColumn.position.set(-0.7, 1.4, 1.3);
             car.add(steeringColumn);
             // Steering wheel ring
             const wheelRing = new THREE.Mesh(
                 new THREE.TorusGeometry(0.22, 0.03, 8, 16),
                 steeringMat
             );
-            wheelRing.rotation.x = Math.PI / 2 - Math.PI / 6;  // Match column angle
-            wheelRing.position.set(-0.7, 1.6, -1.45);
+            wheelRing.rotation.x = Math.PI / 2 + Math.PI / 6;  // Match column angle
+            wheelRing.position.set(-0.7, 1.6, 1.45);
             car.add(wheelRing);
             // Center hub of steering wheel
             const wheelHub = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.08, 0.08, 0.03, 8),
                 steeringMat
             );
-            wheelHub.rotation.x = Math.PI / 2 - Math.PI / 6;
-            wheelHub.position.set(-0.7, 1.6, -1.45);
+            wheelHub.rotation.x = Math.PI / 2 + Math.PI / 6;
+            wheelHub.position.set(-0.7, 1.6, 1.45);
             car.add(wheelHub);
             
-            // Wheels
+            // Wheels - front at +Z, back at -Z
             const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            [[-1.4, -1.8], [1.4, -1.8], [-1.4, 1.6], [1.4, 1.6]].forEach(([x, z]) => {
+            [[-1.4, 1.8], [1.4, 1.8], [-1.4, -1.6], [1.4, -1.6]].forEach(([x, z]) => {
                 const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.5, 16), wheelMat);
                 wheel.rotation.z = Math.PI / 2;
                 wheel.position.set(x, 0.55, z);
@@ -1025,9 +1029,9 @@
                 car.add(hub);
             });
             
-            // Headlights
+            // Headlights (at front, +Z)
             const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 0.3 });
-            [[-0.8, 1.3, -2.5], [0.8, 1.3, -2.5]].forEach(([x, y, z]) => {
+            [[-0.8, 1.3, 2.5], [0.8, 1.3, 2.5]].forEach(([x, y, z]) => {
                 const light = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 8), lightMat);
                 light.rotation.x = Math.PI / 2;
                 light.position.set(x, y, z);
@@ -1880,7 +1884,24 @@
                     if (GameInput.moveSide > 0) { player.position.x -= right.x * runSpeed; player.position.z -= right.z * runSpeed; }
                 }
                 
-                player.position.y = getTerrainHeight(player.position.x, player.position.z);
+                // Jump!
+                const groundY = getTerrainHeight(player.position.x, player.position.z);
+                if (GameInput.consumeAction('jump') && isOnGround) {
+                    playerVelocityY = 12;  // Jump velocity
+                    isOnGround = false;
+                }
+                
+                // Apply gravity
+                playerVelocityY -= 30 * delta;  // Gravity
+                player.position.y += playerVelocityY * delta;
+                
+                // Land on ground
+                if (player.position.y <= groundY) {
+                    player.position.y = groundY;
+                    playerVelocityY = 0;
+                    isOnGround = true;
+                }
+                
                 player.rotation.y = playerRotation;
                 player.visible = false;  // Hide player model in first person
                 

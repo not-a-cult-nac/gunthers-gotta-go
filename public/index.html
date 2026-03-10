@@ -62,6 +62,29 @@
         #crosshair::before { width: 2px; height: 20px; left: 9px; }
         #crosshair::after { width: 20px; height: 2px; top: 9px; }
         
+        /* HUD Arrows */
+        .hud-arrow {
+            position: absolute;
+            pointer-events: none;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000;
+            z-index: 50;
+        }
+        #goal-arrow {
+            top: 60px; left: 50%; transform: translateX(-50%);
+            color: #00ff00;
+        }
+        #goal-arrow .arrow { font-size: 32px; }
+        #gunther-arrow {
+            top: 110px; left: 50%; transform: translateX(-50%);
+            color: #ffeb3b;
+            display: none;
+        }
+        #gunther-arrow .arrow { font-size: 28px; }
+        #gunther-arrow .distance { font-size: 16px; color: #fff; }
+        
         #end-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: none; flex-direction: column; justify-content: center; align-items: center;
@@ -180,6 +203,15 @@
     </div>
     <div id="gunther-speech"></div>
     <div id="crosshair"></div>
+    <div id="goal-arrow" class="hud-arrow">
+        <div class="arrow">⬆</div>
+        <div>GOAL</div>
+    </div>
+    <div id="gunther-arrow" class="hud-arrow">
+        <div class="arrow">⬆</div>
+        <div>GUNTHER</div>
+        <div class="distance">0m</div>
+    </div>
     
     <div id="debug-panel">
         <h3>🔧 DEBUG PANEL (~)</h3>
@@ -1272,6 +1304,42 @@
             scene.add(grabRangeRing);
         }
         
+        function updateHUDArrows() {
+            if (!player || !goal || !gameStarted) return;
+            
+            const goalArrow = document.getElementById('goal-arrow');
+            const guntherArrowEl = document.getElementById('gunther-arrow');
+            if (!goalArrow || !guntherArrowEl) return;
+            
+            // Goal arrow - always visible, points toward goal
+            const goalDx = goal.position.x - player.position.x;
+            const goalDz = goal.position.z - player.position.z;
+            const goalAngle = Math.atan2(goalDx, goalDz);
+            const relativeGoalAngle = goalAngle - playerRotation;
+            goalArrow.querySelector('.arrow').style.transform = `rotate(${-relativeGoalAngle}rad)`;
+            goalArrow.style.display = 'block';
+            
+            // Gunther arrow - only visible when out of car and not being held
+            const guntherVisible = serverState && 
+                serverState.gunther.state !== 'in_car' && 
+                serverState.gunther.state !== 'carried' &&
+                !guntherHoldingHands;
+            
+            if (guntherVisible && gunther) {
+                const gDx = serverState.gunther.x - player.position.x;
+                const gDz = serverState.gunther.z - player.position.z;
+                const guntherAngle = Math.atan2(gDx, gDz);
+                const relativeGuntherAngle = guntherAngle - playerRotation;
+                const guntherDist = Math.hypot(gDx, gDz);
+                
+                guntherArrowEl.querySelector('.arrow').style.transform = `rotate(${-relativeGuntherAngle}rad)`;
+                guntherArrowEl.querySelector('.distance').textContent = `${Math.round(guntherDist)}m`;
+                guntherArrowEl.style.display = 'block';
+            } else {
+                guntherArrowEl.style.display = 'none';
+            }
+        }
+        
         function updateGrabRangeRing() {
             if (!grabRangeRing || !player) return;
             
@@ -1439,13 +1507,46 @@
                     signPole.position.set(h.x, 2.5, h.z - 4);
                     scene.add(signPole);
                 } else if (h.type === 'trap') {
-                    const trap = new THREE.Mesh(
-                        new THREE.TorusGeometry(0.6, 0.12, 8, 12),
-                        new THREE.MeshStandardMaterial({ color: 0x888888 })
+                    // Beartrap with jagged teeth
+                    const trapGroup = new THREE.Group();
+                    const trapMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.3 });
+                    
+                    // Base plate
+                    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.1, 16), trapMat);
+                    trapGroup.add(base);
+                    
+                    // Outer ring (jaw)
+                    const jaw = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.08, 8, 16), trapMat);
+                    jaw.rotation.x = Math.PI / 2;
+                    jaw.position.y = 0.1;
+                    trapGroup.add(jaw);
+                    
+                    // Teeth (spikes around the edge)
+                    const toothMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.9 });
+                    for (let i = 0; i < 12; i++) {
+                        const angle = (i / 12) * Math.PI * 2;
+                        const tooth = new THREE.Mesh(
+                            new THREE.ConeGeometry(0.08, 0.3, 4),
+                            toothMat
+                        );
+                        tooth.position.set(Math.cos(angle) * 0.6, 0.25, Math.sin(angle) * 0.6);
+                        // Point teeth inward
+                        tooth.rotation.z = Math.PI;
+                        tooth.rotation.y = -angle;
+                        tooth.rotation.x = 0.3;
+                        trapGroup.add(tooth);
+                    }
+                    
+                    // Pressure plate in center
+                    const plate = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.3, 0.3, 0.05, 12),
+                        new THREE.MeshStandardMaterial({ color: 0x8B4513 })
                     );
-                    trap.rotation.x = Math.PI / 2;
-                    trap.position.set(h.x, getTerrainHeight(h.x, h.z) + 0.15, h.z);
-                    scene.add(trap);
+                    plate.position.y = 0.08;
+                    trapGroup.add(plate);
+                    
+                    trapGroup.position.set(h.x, getTerrainHeight(h.x, h.z) + 0.05, h.z);
+                    scene.add(trapGroup);
                 }
             }
         }
@@ -1480,6 +1581,81 @@
                 
                 tree.position.set(x, getTerrainHeight(x, z), z);
                 scene.add(tree);
+            }
+            
+            // Castle ruins scattered across landscape
+            const ruinPositions = [
+                { x: -45, z: 60 },
+                { x: 50, z: 150 },
+                { x: -55, z: 250 },
+                { x: 45, z: 350 },
+                { x: -40, z: 420 },
+            ];
+            
+            const stoneMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.9 });
+            const darkStoneMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.95 });
+            
+            for (const pos of ruinPositions) {
+                const ruin = new THREE.Group();
+                const groundY = getTerrainHeight(pos.x, pos.z);
+                
+                // Crumbling tower
+                const towerHeight = 8 + Math.random() * 6;
+                const tower = new THREE.Mesh(
+                    new THREE.CylinderGeometry(3, 3.5, towerHeight, 8, 1, true),
+                    stoneMat
+                );
+                tower.position.y = towerHeight / 2;
+                ruin.add(tower);
+                
+                // Broken top edge (jagged)
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.3;
+                    const block = new THREE.Mesh(
+                        new THREE.BoxGeometry(1.5, 1 + Math.random() * 2, 1),
+                        darkStoneMat
+                    );
+                    block.position.set(
+                        Math.cos(angle) * 2.5,
+                        towerHeight + Math.random(),
+                        Math.sin(angle) * 2.5
+                    );
+                    block.rotation.set(Math.random() * 0.3, angle, Math.random() * 0.2);
+                    ruin.add(block);
+                }
+                
+                // Scattered wall segment
+                const wallLength = 6 + Math.random() * 4;
+                const wallHeight = 3 + Math.random() * 3;
+                const wall = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.5, wallHeight, wallLength),
+                    stoneMat
+                );
+                wall.position.set(6, wallHeight / 2, Math.random() * 4 - 2);
+                wall.rotation.y = Math.random() * 0.5;
+                ruin.add(wall);
+                
+                // Fallen stones
+                for (let i = 0; i < 5; i++) {
+                    const stone = new THREE.Mesh(
+                        new THREE.BoxGeometry(
+                            0.5 + Math.random() * 1.5,
+                            0.3 + Math.random() * 0.8,
+                            0.5 + Math.random() * 1.5
+                        ),
+                        darkStoneMat
+                    );
+                    stone.position.set(
+                        (Math.random() - 0.5) * 12,
+                        0.2,
+                        (Math.random() - 0.5) * 12
+                    );
+                    stone.rotation.set(Math.random() * 0.3, Math.random() * Math.PI, Math.random() * 0.3);
+                    ruin.add(stone);
+                }
+                
+                ruin.position.set(pos.x, groundY, pos.z);
+                scene.add(ruin);
             }
         }
         
@@ -2015,6 +2191,7 @@
             // Update visual indicators every frame
             updateGrabRangeRing();
             updateHandLink();
+            updateHUDArrows();
             
             // Reset input deltas
             if (typeof GameInput !== 'undefined') GameInput.resetDeltas();

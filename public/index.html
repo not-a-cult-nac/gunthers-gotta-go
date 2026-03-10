@@ -2314,6 +2314,9 @@
         
         let activeFlares = [];
         let lastScoutFiredState = new Map(); // Track which scouts have fired
+        let lastJeepDamageSfxTime = 0;
+        let lastPlayerDamageSfxTime = 0;
+        const DAMAGE_SFX_COOLDOWN = 500; // ms between damage sounds
         
         function updateFromServer(state) {
             // Update health from server - track damage for SFX
@@ -2329,9 +2332,16 @@
                 if (me && me.health !== undefined) playerHealth = me.health;
             }
             
-            // Play damage SFX
-            if (jeepHealth < prevJeepHealth) SFX.jeepDamage();
-            if (playerHealth < prevPlayerHealth) SFX.playerDamage();
+            // Play damage SFX with cooldown to prevent spam
+            const now = Date.now();
+            if (jeepHealth < prevJeepHealth && now - lastJeepDamageSfxTime > DAMAGE_SFX_COOLDOWN) {
+                SFX.jeepDamage();
+                lastJeepDamageSfxTime = now;
+            }
+            if (playerHealth < prevPlayerHealth && now - lastPlayerDamageSfxTime > DAMAGE_SFX_COOLDOWN) {
+                SFX.playerDamage();
+                lastPlayerDamageSfxTime = now;
+            }
             
             // Create smoke if jeep is damaged
             if (jeepHealth <= 33 && !jeepSmoke) createJeepSmoke();

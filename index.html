@@ -191,7 +191,7 @@
         
         // Controls
         const keys = {};
-        let debugMode = false;
+        window.debugMode = false;
         let mouseX = 0, mouseY = 0;
         let tankRotationY = 0;
         let cameraPitch = 0;
@@ -272,8 +272,8 @@
             document.addEventListener('keydown', (e) => {
                 keys[e.code] = true;
                 if (e.code === 'KeyM') {
-                    debugMode = !debugMode;
-                    console.log('Debug mode:', debugMode);
+                    window.debugMode = !window.debugMode;
+                    console.log('Debug mode:', window.debugMode);
                 }
             });
             document.addEventListener('keyup', (e) => keys[e.code] = false);
@@ -775,7 +775,7 @@
                 tank.position.z = Math.max(-60, Math.min(90, tank.position.z));
                 
                 // Camera follows tank
-                if (!debugMode) {
+                if (!window.debugMode) {
                     cameraPitch = -mouseY;
                     const camOffset = new THREE.Vector3(0, 5, -10);
                     camOffset.applyQuaternion(tank.quaternion);
@@ -787,7 +787,7 @@
             }
             
             // Debug mode: top-down view of entire field
-            if (debugMode) {
+            if (window.debugMode) {
                 camera.position.set(0, 150, 20);
                 camera.lookAt(0, 0, 20);
             }

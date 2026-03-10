@@ -117,8 +117,8 @@ class GameRoom {
         const baseSpeed = this.config.enemySpeed;
         // 40% chance to spawn a killer, 60% stealer
         const type = Math.random() < 0.4 ? 'killer' : 'stealer';
-        // Stealers (1.35x), killers faster (1.6x) - 10% slower than before
-        const speedMult = type === 'killer' ? 1.6 : 1.35;
+        // Stealers (1.2x), killers faster (1.45x) - another 10% slower
+        const speedMult = type === 'killer' ? 1.45 : 1.2;
         const enemy = {
             id: this.enemyIdCounter++,
             type: type,
@@ -128,7 +128,7 @@ class GameRoom {
             vz: 0,
             health: 2,
             hasGunther: false,
-            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.35  // 10% slower than before
+            speed: (baseSpeed + Math.random() * (baseSpeed * 0.5)) * speedMult * 1.2  // another 10% slower
         };
         this.enemies.push(enemy);
         return enemy;
@@ -417,6 +417,11 @@ class GameRoom {
                             z: enemy.z,
                             enemyType: enemy.type
                         });
+                        // Check if this player died
+                        if (this.playerHealth[id] <= 0 && this.gameState === 'playing') {
+                            this.gameState = 'lost';
+                            this.loseReason = 'You were overwhelmed by the enemies!';
+                        }
                         if (enemy.type === 'killer') {
                             enemiesToRemove.add(enemy.id); // Killers explode
                         }
@@ -433,6 +438,45 @@ class GameRoom {
         
         // Remove exploded killers
         this.enemies = this.enemies.filter(e => !enemiesToRemove.has(e.id));
+        
+        // Enemy-enemy separation (prevent stacking)
+        const ENEMY_RADIUS = 1.5;
+        for (let i = 0; i < this.enemies.length; i++) {
+            for (let j = i + 1; j < this.enemies.length; j++) {
+                const a = this.enemies[i];
+                const b = this.enemies[j];
+                const dx = b.x - a.x;
+                const dz = b.z - a.z;
+                const dist = Math.hypot(dx, dz);
+                const minDist = ENEMY_RADIUS * 2;
+                
+                if (dist < minDist && dist > 0) {
+                    // Push them apart
+                    const overlap = (minDist - dist) / 2;
+                    const nx = dx / dist;
+                    const nz = dz / dist;
+                    a.x -= nx * overlap;
+                    a.z -= nz * overlap;
+                    b.x += nx * overlap;
+                    b.z += nz * overlap;
+                }
+            }
+        }
+        
+        // Enemy-jeep collision (keep enemies outside the jeep)
+        const JEEP_RADIUS = 3.5;
+        for (const enemy of this.enemies) {
+            const dx = enemy.x - this.car.x;
+            const dz = enemy.z - this.car.z;
+            const dist = Math.hypot(dx, dz);
+            
+            if (dist < JEEP_RADIUS && dist > 0) {
+                // Push enemy outside jeep
+                const pushDist = JEEP_RADIUS - dist;
+                enemy.x += (dx / dist) * pushDist;
+                enemy.z += (dz / dist) * pushDist;
+            }
+        }
         
         // Check if all players are dead
         let allDead = true;

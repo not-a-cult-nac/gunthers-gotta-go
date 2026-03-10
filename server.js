@@ -110,7 +110,7 @@ class GameRoom {
     start() {
         this.gameState = 'playing';
         // Spawn initial enemies along the route
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 10; i++) {
             this.spawnEnemy();
         }
     }
@@ -326,12 +326,12 @@ class GameRoom {
         }
         
         // Spawn enemies as car progresses
-        if (Math.random() < 0.008 && this.enemies.length < 8) {
+        if (Math.random() < 0.012 && this.enemies.length < 15) {
             this.spawnEnemy();
         }
         
-        // Remove enemies too far behind
-        this.enemies = this.enemies.filter(e => e.z > this.car.z - 80 || e.hasGunther);
+        // Remove enemies too far behind (silently despawn - no death effect)
+        this.enemies = this.enemies.filter(e => e.z > this.car.z - 150 || e.hasGunther);
         
         // Win check - use 15m threshold for margin
         const goalDist = Math.hypot(this.car.x, this.car.z - GOAL_Z);

@@ -520,6 +520,7 @@
         let car, player, gunther, goal;
         let handLinkGroup; // Visual connection when holding Gunther's hand
         let enemyMeshes = new Map();
+        let killedEnemyIds = new Set(); // Track enemies killed (vs despawned) for sound
         let otherPlayers = new Map();
         let isDriver = false;
         let myPlayerId = null;
@@ -783,6 +784,8 @@
         
         socket.on('enemyHit', (data) => {
             SFX.hit();
+            // Track that this enemy was killed (not despawned) for death sound
+            if (data.killed) killedEnemyIds.add(data.id);
             const mesh = enemyMeshes.get(data.id);
             if (mesh) {
                 mesh.children.forEach(c => {
@@ -2042,7 +2045,11 @@
                 if (!currentIds.has(id)) {
                     scene.remove(mesh);
                     enemyMeshes.delete(id);
-                    SFX.enemyDeath();
+                    // Only play death sound if enemy was killed, not despawned for distance
+                    if (killedEnemyIds.has(id)) {
+                        SFX.enemyDeath();
+                        killedEnemyIds.delete(id);
+                    }
                 }
             });
             

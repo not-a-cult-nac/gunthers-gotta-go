@@ -135,8 +135,8 @@ class AIController {
             return;
         }
         
-        // Priority 3: Gunther holding hands - get to car
-        if (gunther.state === 'holding_hands') {
+        // Priority 3: Gunther being carried (server uses 'carried', we also accept 'holding_hands' for compat)
+        if (gunther.state === 'holding_hands' || gunther.state === 'carried') {
             this.handleHoldingGunther(state, inputs);
             return;
         }

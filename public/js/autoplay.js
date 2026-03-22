@@ -198,8 +198,8 @@ const AutoplayController = {
             return;
         }
         
-        // STATE 4: Holding Gunther's hand → GET BACK TO CAR
-        if (gunther?.state === 'holding_hands') {
+        // STATE 4: Carrying Gunther (server uses 'carried', also check 'holding_hands' for compat) → GET BACK TO CAR
+        if (gunther?.state === 'holding_hands' || gunther?.state === 'carried') {
             if (inCar) {
                 // We're in car with Gunther, drive!
                 this.driveTowardGoal(carRotation);

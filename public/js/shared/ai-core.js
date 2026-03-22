@@ -12,7 +12,7 @@ const AI_CONFIG = {
     CAR_ENTER_RANGE: 5,
     
     // Human-like constraints (in ticks, 1 tick = 1 simulation frame)
-    REACTION_TICKS: 108,         // ticks to notice state changes (~1.8s at 60fps)
+    REACTION_TICKS: 30,          // ticks to notice state changes (~0.5s at 60fps) - faster for captures!
     AIM_TICKS: 6,                // ticks to acquire target before first shot (~0.1s at 60fps)
 };
 
@@ -127,10 +127,10 @@ class AIController {
         }
         
         // Priority 2: Gunther loose - grab him
-        // React immediately if near goal (no time to wait!), otherwise wait for reaction time
+        // Always react immediately when already on foot (we're engaged!)
+        // Reaction time only applies when deciding to exit the car
         const goalDist = Math.hypot(car.x, car.z - (state.goalZ || 440));
-        const nearGoal = goalDist < 50;
-        if ((gunther.state === 'wandering' || gunther.state === 'trapped') && (nearGoal || reactionComplete)) {
+        if (gunther.state === 'wandering' || gunther.state === 'trapped') {
             this.handleLooseGunther(state, inputs);
             return;
         }

@@ -2826,19 +2826,30 @@
             if (GameInput.consumeAction('shoot') && !isInCar && !guntherHoldingHands && (shootNow - lastShootTime > 200)) {
                 lastShootTime = shootNow;
                 
-                // 3D direction toward reticle (includes vertical pitch)
-                const horizontalDir = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
-                const dirX = horizontalDir.x * Math.cos(cameraPitch);
+                // Use AI's custom shoot direction if set, otherwise use player facing direction
+                let shootDirX, shootDirZ;
+                if (GameInput.shootDirection) {
+                    shootDirX = GameInput.shootDirection.x;
+                    shootDirZ = GameInput.shootDirection.z;
+                    GameInput.shootDirection = null;  // Consume the custom direction
+                } else {
+                    // 3D direction toward reticle (includes vertical pitch)
+                    const horizontalDir = new THREE.Vector3(Math.sin(playerRotation), 0, Math.cos(playerRotation));
+                    shootDirX = horizontalDir.x;
+                    shootDirZ = horizontalDir.z;
+                }
+                
+                const dirX = shootDirX * Math.cos(cameraPitch);
                 const dirY = Math.sin(cameraPitch);
-                const dirZ = horizontalDir.z * Math.cos(cameraPitch);
+                const dirZ = shootDirZ * Math.cos(cameraPitch);
                 
                 // Gun muzzle position (offset from player towards right side)
                 const rightDir = new THREE.Vector3(Math.cos(playerRotation), 0, -Math.sin(playerRotation));
-                const gunX = player.position.x + rightDir.x * 0.4 + horizontalDir.x * 0.5;
-                const gunZ = player.position.z + rightDir.z * 0.4 + horizontalDir.z * 0.5;
+                const gunX = player.position.x + rightDir.x * 0.4 + shootDirX * 0.5;
+                const gunZ = player.position.z + rightDir.z * 0.4 + shootDirZ * 0.5;
                 const gunY = player.position.y + 1.0;
                 
-                socket.emit('shoot', { x: gunX, z: gunZ, dirX: horizontalDir.x, dirZ: horizontalDir.z });
+                socket.emit('shoot', { x: gunX, z: gunZ, dirX: shootDirX, dirZ: shootDirZ });
                 SFX.shoot();
                 
                 // Tracer visual from gun muzzle toward reticle (3D direction)

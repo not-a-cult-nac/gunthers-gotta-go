@@ -139,9 +139,10 @@ class GameRoom {
     }
     
     spawnEnemy() {
-        // Spawn enemies near and ahead of the car
-        const minZ = Math.max(START_Z, this.car.z);
-        const maxZ = Math.min(GOAL_Z - 30, this.car.z + 80);
+        // Spawn enemies AHEAD of the car, not at spawn point
+        // Minimum 30 units ahead to give players breathing room at start
+        const minZ = Math.max(START_Z + 30, this.car.z + 30);
+        const maxZ = Math.min(GOAL_Z - 30, this.car.z + 100);
         
         const side = Math.random() > 0.5 ? 1 : -1;
         const baseSpeed = this.config.enemySpeed;

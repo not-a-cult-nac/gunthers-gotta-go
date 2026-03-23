@@ -30,17 +30,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         game.start();
     });
     
-    // Handle pointer lock
-    document.addEventListener('pointerlockchange', () => {
-        if (!document.pointerLockElement && game?.isRunning) {
-            // Paused - could show pause menu
-        }
-    });
+    // Check if mobile
+    const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.location.search.includes('mobile');
     
-    // Re-lock on click during game
-    document.addEventListener('click', () => {
-        if (game?.isRunning && !document.pointerLockElement) {
-            document.body.requestPointerLock();
-        }
-    });
+    // Handle pointer lock (desktop only)
+    if (!isMobile) {
+        document.addEventListener('pointerlockchange', () => {
+            if (!document.pointerLockElement && game?.isRunning) {
+                // Paused - could show pause menu
+            }
+        });
+        
+        // Re-lock on click during game
+        document.addEventListener('click', () => {
+            if (game?.isRunning && !document.pointerLockElement) {
+                document.body.requestPointerLock();
+            }
+        });
+    }
 });

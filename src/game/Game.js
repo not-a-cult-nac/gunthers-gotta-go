@@ -13,6 +13,7 @@ import { UIManager } from './UIManager.js';
 import { AudioManager } from './AudioManager.js';
 import { HUDArrows } from './HUDArrows.js';
 import { GameConfig } from './GameConfig.js';
+import { MobileControls } from './MobileControls.js';
 
 export class Game {
     constructor(RAPIER) {
@@ -77,6 +78,7 @@ export class Game {
         
         // Initialize game systems
         this.inputManager = new InputManager();
+        this.mobileControls = new MobileControls(this.inputManager);
         this.uiManager = new UIManager();
         this.audioManager = new AudioManager();
         this.audioManager.init();

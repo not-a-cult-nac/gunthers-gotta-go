@@ -292,6 +292,11 @@ export class Player {
         // Reset mouse look when exiting vehicle
         this.rotation.x = 0;
         this.rotation.y = vehicle.rotation; // Face same direction as vehicle
+        
+        // CRITICAL: Reset camera rotation completely to fix lookAt() residue
+        this.camera.rotation.set(0, vehicle.rotation, 0);
+        this.camera.rotation.order = 'YXZ';
+        this.camera.up.set(0, 1, 0); // Ensure up vector is correct
     }
     
     tryEnterVehicle(vehicle) {

@@ -6,10 +6,11 @@ import * as THREE from 'three';
 import { GameConfig } from './GameConfig.js';
 
 export class Gunther {
-    constructor(scene, physicsWorld, RAPIER) {
+    constructor(scene, physicsWorld, RAPIER, audioManager) {
         this.scene = scene;
         this.physicsWorld = physicsWorld;
         this.RAPIER = RAPIER;
+        this.audioManager = audioManager;
         
         this.mesh = null;
         this.position = new THREE.Vector3();
@@ -272,6 +273,11 @@ export class Gunther {
         // Say something
         const quote = GameConfig.QUOTES.escape[Math.floor(Math.random() * GameConfig.QUOTES.escape.length)];
         this.speak(quote);
+        
+        // Play alert sound
+        if (this.audioManager) {
+            this.audioManager.playAlert();
+        }
     }
     
     getTrapped(hazard) {

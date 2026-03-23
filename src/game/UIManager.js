@@ -16,6 +16,9 @@ export class UIManager {
             endScreen: document.getElementById('end-screen'),
             endTitle: document.getElementById('end-title'),
             endText: document.getElementById('end-text'),
+            guntherIndicator: document.getElementById('gunther-indicator'),
+            guntherArrow: document.getElementById('gunther-arrow'),
+            guntherDist: document.getElementById('gunther-dist'),
         };
         
         this.speechTimeout = null;
@@ -46,6 +49,41 @@ export class UIManager {
         
         this.elements.jeepHealth.style.width = `${jeepPercent}%`;
         this.elements.playerHealth.style.width = `${playerPercent}%`;
+        
+        // Gunther direction indicator (when not in vehicle)
+        if (gunther.state !== 'in_vehicle' && this.elements.guntherIndicator) {
+            this.elements.guntherIndicator.style.display = 'block';
+            
+            // Calculate direction from vehicle to Gunther
+            const dx = gunther.position.x - vehicle.position.x;
+            const dz = gunther.position.z - vehicle.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            
+            // Angle relative to vehicle facing direction
+            const targetAngle = Math.atan2(dx, dz);
+            const relAngle = targetAngle - vehicle.rotation;
+            
+            // Convert to arrow character
+            let arrow = '⬆';
+            const normalized = ((relAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+            if (normalized > Math.PI * 7/8 && normalized < Math.PI * 9/8) arrow = '⬇';
+            else if (normalized > Math.PI * 5/8 && normalized <= Math.PI * 7/8) arrow = '↙';
+            else if (normalized > Math.PI * 3/8 && normalized <= Math.PI * 5/8) arrow = '⬅';
+            else if (normalized > Math.PI * 1/8 && normalized <= Math.PI * 3/8) arrow = '↖';
+            else if (normalized > Math.PI * 15/8 || normalized <= Math.PI * 1/8) arrow = '⬆';
+            else if (normalized > Math.PI * 13/8 && normalized <= Math.PI * 15/8) arrow = '↗';
+            else if (normalized > Math.PI * 11/8 && normalized <= Math.PI * 13/8) arrow = '➡';
+            else if (normalized > Math.PI * 9/8 && normalized <= Math.PI * 11/8) arrow = '↘';
+            
+            this.elements.guntherArrow.textContent = arrow;
+            this.elements.guntherDist.textContent = `GUNTHER: ${Math.round(dist)}m`;
+            
+            // Color based on danger
+            const color = gunther.state === 'kidnapped' ? '#ff0000' : '#ffcc00';
+            this.elements.guntherIndicator.style.color = color;
+        } else if (this.elements.guntherIndicator) {
+            this.elements.guntherIndicator.style.display = 'none';
+        }
     }
     
     showSpeech(text, duration = 3000) {

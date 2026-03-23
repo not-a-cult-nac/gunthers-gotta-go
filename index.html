@@ -224,6 +224,24 @@
     <div id="gunther-speech"></div>
     <div id="crosshair"></div>
     
+    <!-- Gunther direction indicator -->
+    <div id="gunther-indicator" style="
+        position: absolute;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #ffcc00;
+        font-size: 24px;
+        font-weight: bold;
+        text-shadow: 2px 2px 4px #000;
+        z-index: 100;
+        display: none;
+        text-align: center;
+    ">
+        <div id="gunther-arrow" style="font-size: 36px;">⬆</div>
+        <div id="gunther-dist">GUNTHER: 0m</div>
+    </div>
+    
     <div id="instructions">
         WASD: Move | MOUSE: Aim | CLICK: Shoot | E: Enter/Exit Jeep | SPACE: Grab Gunther | C: Toggle Camera
     </div>

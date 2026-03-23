@@ -10,6 +10,7 @@ import { Gunther } from './Gunther.js';
 import { EnemyManager } from './EnemyManager.js';
 import { InputManager } from './InputManager.js';
 import { UIManager } from './UIManager.js';
+import { AudioManager } from './AudioManager.js';
 import { GameConfig } from './GameConfig.js';
 
 export class Game {
@@ -34,6 +35,7 @@ export class Game {
         this.enemyManager = null;
         this.inputManager = null;
         this.uiManager = null;
+        this.audioManager = null;
         
         // Timing
         this.clock = new THREE.Clock();
@@ -72,6 +74,8 @@ export class Game {
         // Initialize game systems
         this.inputManager = new InputManager();
         this.uiManager = new UIManager();
+        this.audioManager = new AudioManager();
+        this.audioManager.init();
         
         this.world = new World(this.scene, this.physicsWorld, this.RAPIER);
         await this.world.init();
@@ -79,11 +83,11 @@ export class Game {
         this.vehicle = new Vehicle(this.scene, this.physicsWorld, this.RAPIER);
         this.vehicle.init();
         
-        this.player = new Player(this.scene, this.physicsWorld, this.RAPIER, this.camera);
+        this.player = new Player(this.scene, this.physicsWorld, this.RAPIER, this.camera, this.audioManager);
         this.player.init();
         this.player.enterVehicle(this.vehicle); // Start in vehicle
         
-        this.gunther = new Gunther(this.scene, this.physicsWorld, this.RAPIER);
+        this.gunther = new Gunther(this.scene, this.physicsWorld, this.RAPIER, this.audioManager);
         this.gunther.init(this.vehicle);
         
         this.enemyManager = new EnemyManager(this.scene, this.physicsWorld, this.RAPIER);

@@ -6,11 +6,12 @@ import * as THREE from 'three';
 import { GameConfig } from './GameConfig.js';
 
 export class Player {
-    constructor(scene, physicsWorld, RAPIER, camera) {
+    constructor(scene, physicsWorld, RAPIER, camera, audioManager) {
         this.scene = scene;
         this.physicsWorld = physicsWorld;
         this.RAPIER = RAPIER;
         this.camera = camera;
+        this.audioManager = audioManager;
         
         this.mesh = null;
         this.rigidBody = null;
@@ -228,6 +229,11 @@ export class Player {
         
         this.bullets.push(bullet);
         this.scene.add(bullet);
+        
+        // Play sound
+        if (this.audioManager) {
+            this.audioManager.playShoot();
+        }
     }
     
     updateBullets(delta) {

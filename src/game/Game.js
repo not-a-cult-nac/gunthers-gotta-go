@@ -179,7 +179,21 @@ export class Game {
     }
     
     handleGuntherInteractions(input) {
-        // Only handle grab/throw when on foot
+        // If player enters vehicle while carrying Gunther, put him in too
+        if (this.player.carryingGunther && this.player.inVehicle) {
+            this.gunther.putInVehicle();
+            this.player.carryingGunther = false;
+            return;
+        }
+        
+        // If enemy carrying Gunther is killed, free Gunther
+        if (this.gunther.state === 'kidnapped' && this.gunther.captor && this.gunther.captor.isDead) {
+            this.gunther.state = 'wandering';
+            this.gunther.captor = null;
+            this.gunther.speak("I am FREE! Now where is ze danger?");
+        }
+        
+        // Rest only applies when on foot
         if (this.player.inVehicle) return;
         
         // SPACE to grab Gunther (when not carrying)
@@ -197,22 +211,8 @@ export class Game {
         
         // SPACE to throw Gunther (when carrying)
         if (input.grab && this.player.carryingGunther && this.gunther.state === 'carried' && this.player.interactCooldown <= 0) {
-            // Throw Gunther in direction player is facing
             this.throwGunther();
-            this.player.interactCooldown = 0.3;
-        }
-        
-        // If player enters vehicle while carrying (handled by E key)
-        if (this.player.carryingGunther && this.player.inVehicle) {
-            this.gunther.putInVehicle();
-            this.player.carryingGunther = false;
-        }
-        
-        // If enemy carrying Gunther is killed, free Gunther
-        if (this.gunther.state === 'kidnapped' && this.gunther.captor && this.gunther.captor.isDead) {
-            this.gunther.state = 'wandering';
-            this.gunther.captor = null;
-            this.gunther.speak("I am FREE! Now where is ze danger?");
+            this.player.interactCooldown = 0.5; // Longer cooldown for throw
         }
     }
     
@@ -221,17 +221,24 @@ export class Game {
         const throwDistance = 8;
         const throwDir = new THREE.Vector3(
             Math.sin(this.player.rotation.y),
-            0.3, // Slight upward arc
+            0,
             Math.cos(this.player.rotation.y)
         ).normalize();
         
         const landingPos = this.player.position.clone().add(throwDir.multiplyScalar(throwDistance));
         landingPos.y = this.world.getHeightAt(landingPos.x, landingPos.z);
         
-        this.gunther.throwTo(landingPos);
-        this.player.carryingGunther = false;
+        // Check if landing near the jeep - if so, put him in!
+        const distToJeep = landingPos.distanceTo(this.vehicle.position);
+        if (distToJeep < 5) {
+            this.gunther.putInVehicle();
+            this.gunther.speak("Back in ze car! Danke!");
+        } else {
+            this.gunther.throwTo(landingPos);
+            this.gunther.speak("WHEEEEE!");
+        }
         
-        this.gunther.speak("WHEEEEE!");
+        this.player.carryingGunther = false;
     }
     
     checkGameState() {

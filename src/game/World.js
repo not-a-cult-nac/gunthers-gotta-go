@@ -96,7 +96,7 @@ export class World {
         const mat = new THREE.MeshStandardMaterial({
             color: 0xff4400,
             emissive: 0xff2200,
-            emissiveIntensity: 0.5,
+            emissiveIntensity: 0.8,
             roughness: 0.3,
         });
         const mesh = new THREE.Mesh(geo, mat);
@@ -105,17 +105,22 @@ export class World {
         mesh.userData = { type: 'lava', hazard };
         this.scene.add(mesh);
         
-        // Add glow effect
-        const glowGeo = new THREE.CircleGeometry(hazard.radius + 2, 32);
+        // Add larger outer glow
+        const glowGeo = new THREE.CircleGeometry(hazard.radius + 3, 32);
         const glowMat = new THREE.MeshBasicMaterial({
             color: 0xff6600,
             transparent: true,
-            opacity: 0.3,
+            opacity: 0.4,
         });
         const glow = new THREE.Mesh(glowGeo, glowMat);
         glow.rotation.x = -Math.PI / 2;
         glow.position.set(hazard.x, 0.03, hazard.z);
         this.scene.add(glow);
+        
+        // Add point light for dynamic lighting
+        const light = new THREE.PointLight(0xff4400, 2, hazard.radius * 3);
+        light.position.set(hazard.x, 2, hazard.z);
+        this.scene.add(light);
     }
     
     createCliff(hazard) {

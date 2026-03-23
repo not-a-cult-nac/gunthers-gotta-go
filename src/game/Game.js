@@ -143,6 +143,9 @@ export class Game {
             this.gunther.update(delta, this.vehicle, this.player, this.enemyManager.enemies);
             this.enemyManager.update(delta, this.vehicle, this.gunther, this.player);
             
+            // Handle Gunther interactions
+            this.handleGuntherInteractions(input);
+            
             // Check win/lose conditions
             this.checkGameState();
         }
@@ -152,6 +155,40 @@ export class Game {
         
         // Render
         this.renderer.render(this.scene, this.camera);
+    }
+    
+    handleGuntherInteractions(input) {
+        // Player tries to grab Gunther
+        if (input.grab && !this.player.carryingGunther) {
+            // Check if Gunther is nearby and grabbable
+            const dist = this.player.position.distanceTo(this.gunther.position);
+            if (dist < 3 && (this.gunther.state === 'wandering' || this.gunther.state === 'trapped')) {
+                this.gunther.rescue(this.player);
+            }
+        }
+        
+        // Player is carrying Gunther
+        if (this.player.carryingGunther && this.gunther.state === 'carried') {
+            // If player enters vehicle while carrying, put Gunther in too
+            if (this.player.inVehicle) {
+                this.gunther.putInVehicle();
+                this.player.carryingGunther = false;
+            }
+            
+            // Drop Gunther with grab key when already carrying
+            if (input.grab && this.player.interactCooldown <= 0) {
+                this.gunther.dropFromCarry();
+                this.player.carryingGunther = false;
+                this.player.interactCooldown = 0.3;
+            }
+        }
+        
+        // If enemy carrying Gunther is killed, free Gunther
+        if (this.gunther.state === 'kidnapped' && this.gunther.captor && this.gunther.captor.isDead) {
+            this.gunther.state = 'wandering';
+            this.gunther.captor = null;
+            this.gunther.speak("I am FREE! Now where is ze danger?");
+        }
     }
     
     checkGameState() {

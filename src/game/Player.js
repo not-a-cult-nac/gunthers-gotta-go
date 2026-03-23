@@ -31,6 +31,9 @@ export class Player {
         
         // Interaction cooldown (prevent spam)
         this.interactCooldown = 0;
+        
+        // Camera mode
+        this.thirdPerson = true; // Default to third person in vehicle
     }
     
     init() {
@@ -64,11 +67,19 @@ export class Player {
         if (this.shootCooldown > 0) this.shootCooldown -= delta;
         if (this.interactCooldown > 0) this.interactCooldown -= delta;
         
-        // Camera rotation (mouse look)
-        const sensitivity = 0.002;
-        this.rotation.y -= input.mouseX * sensitivity;
-        this.rotation.x -= input.mouseY * sensitivity;
-        this.rotation.x = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, this.rotation.x));
+        // Camera rotation (mouse look) - only in first person
+        if (!this.thirdPerson || !this.inVehicle) {
+            const sensitivity = 0.002;
+            this.rotation.y -= input.mouseX * sensitivity;
+            this.rotation.x -= input.mouseY * sensitivity;
+            this.rotation.x = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, this.rotation.x));
+        }
+        
+        // Toggle camera mode
+        if (input.toggleCamera && this.interactCooldown <= 0) {
+            this.thirdPerson = !this.thirdPerson;
+            this.interactCooldown = 0.3;
+        }
         
         if (this.inVehicle) {
             this.updateInVehicle(delta, input, vehicle);
@@ -100,13 +111,35 @@ export class Player {
         this.position.copy(vehicle.position);
         this.position.y += 1;
         
-        // Camera follows player look direction
-        this.camera.position.copy(this.position);
-        this.camera.rotation.order = 'YXZ';
-        this.camera.rotation.y = this.rotation.y;
-        this.camera.rotation.x = this.rotation.x;
+        if (this.thirdPerson) {
+            // Third person camera - behind and above vehicle
+            const cameraDistance = 12;
+            const cameraHeight = 6;
+            
+            // Camera looks at vehicle, offset behind based on vehicle rotation
+            const cameraOffset = new THREE.Vector3(
+                -Math.sin(vehicle.rotation) * cameraDistance,
+                cameraHeight,
+                -Math.cos(vehicle.rotation) * cameraDistance
+            );
+            
+            this.camera.position.copy(vehicle.position).add(cameraOffset);
+            
+            // Look at a point slightly ahead of vehicle
+            const lookTarget = vehicle.position.clone();
+            lookTarget.y += 2;
+            lookTarget.z += Math.cos(vehicle.rotation) * 5;
+            lookTarget.x += Math.sin(vehicle.rotation) * 5;
+            this.camera.lookAt(lookTarget);
+        } else {
+            // First person camera
+            this.camera.position.copy(this.position);
+            this.camera.rotation.order = 'YXZ';
+            this.camera.rotation.y = this.rotation.y;
+            this.camera.rotation.x = this.rotation.x;
+        }
         
-        // Hide player mesh in first person
+        // Hide player mesh
         this.mesh.visible = false;
     }
     
@@ -161,17 +194,31 @@ export class Player {
         
         this.shootCooldown = GameConfig.PLAYER_SHOOT_COOLDOWN;
         
-        // Create bullet
-        const bulletGeo = new THREE.SphereGeometry(0.1, 8, 8);
-        const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        // Create bullet with trail effect
+        const bulletGeo = new THREE.SphereGeometry(0.15, 8, 8);
+        const bulletMat = new THREE.MeshBasicMaterial({ 
+            color: 0xffff00,
+        });
         const bullet = new THREE.Mesh(bulletGeo, bulletMat);
         
-        // Start position (from camera)
-        bullet.position.copy(this.camera.position);
+        // Add trail
+        const trailGeo = new THREE.CylinderGeometry(0.05, 0.1, 1, 8);
+        const trailMat = new THREE.MeshBasicMaterial({ 
+            color: 0xffaa00,
+            transparent: true,
+            opacity: 0.6,
+        });
+        const trail = new THREE.Mesh(trailGeo, trailMat);
+        trail.rotation.x = Math.PI / 2;
+        trail.position.z = 0.5;
+        bullet.add(trail);
         
-        // Direction (forward from camera)
+        // Start position (from camera, slightly forward)
         const direction = new THREE.Vector3(0, 0, -1);
         direction.applyQuaternion(this.camera.quaternion);
+        
+        bullet.position.copy(this.camera.position);
+        bullet.position.add(direction.clone().multiplyScalar(2)); // Start 2 units ahead
         
         bullet.userData = {
             velocity: direction.multiplyScalar(100),

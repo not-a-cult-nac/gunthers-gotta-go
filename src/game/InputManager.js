@@ -13,6 +13,7 @@ export class InputManager {
             interact: false, // E key - enter/exit vehicle
             grab: false,     // Space - grab Gunther
             boost: false,    // Shift
+            toggleCamera: false, // C key
         };
         
         this.mouse = {
@@ -64,6 +65,9 @@ export class InputManager {
             case 'ShiftRight':
                 this.keys.boost = true;
                 break;
+            case 'KeyC':
+                this.keys.toggleCamera = true;
+                break;
         }
     }
     
@@ -94,6 +98,9 @@ export class InputManager {
             case 'ShiftLeft':
             case 'ShiftRight':
                 this.keys.boost = false;
+                break;
+            case 'KeyC':
+                this.keys.toggleCamera = false;
                 break;
         }
     }

@@ -26,17 +26,28 @@ class Enemy {
     }
     
     createMesh() {
-        // Enemy mesh - different colors by type
-        const bodyGeo = new THREE.CapsuleGeometry(0.4, 1.0, 8, 16);
-        const color = this.type === 'killer' ? 0xff0000 : 0x990099;
+        // Enemy mesh - different colors by type, larger and more visible
+        const bodyGeo = new THREE.CapsuleGeometry(0.6, 1.5, 8, 16);
+        const color = this.type === 'killer' ? 0xff0000 : 0x9900ff;
         const bodyMat = new THREE.MeshStandardMaterial({
             color: color,
             roughness: 0.5,
+            emissive: color,
+            emissiveIntensity: 0.3, // Slight glow
         });
         this.mesh = new THREE.Mesh(bodyGeo, bodyMat);
         this.mesh.castShadow = true;
         this.mesh.position.copy(this.position);
         this.scene.add(this.mesh);
+        
+        // Add a floating indicator above head
+        const indicatorGeo = new THREE.SphereGeometry(0.3, 8, 8);
+        const indicatorMat = new THREE.MeshBasicMaterial({
+            color: this.type === 'killer' ? 0xff0000 : 0xff00ff,
+        });
+        const indicator = new THREE.Mesh(indicatorGeo, indicatorMat);
+        indicator.position.y = 1.5;
+        this.mesh.add(indicator);
     }
     
     update(delta, target, gunther) {

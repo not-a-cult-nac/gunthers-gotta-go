@@ -36,21 +36,35 @@ export class Gunther {
     init(vehicle) {
         this.vehicle = vehicle;
         
-        // Gunther mesh - small child-like figure
-        const bodyGeo = new THREE.CapsuleGeometry(0.3, 0.6, 8, 16);
+        // Gunther mesh - small child-like figure, bright and visible
+        const bodyGeo = new THREE.CapsuleGeometry(0.4, 0.8, 8, 16);
         const bodyMat = new THREE.MeshStandardMaterial({
             color: 0xffcc00, // Bright yellow (he's easy to spot!)
             roughness: 0.6,
+            emissive: 0xffcc00,
+            emissiveIntensity: 0.2, // Slight glow
         });
         this.mesh = new THREE.Mesh(bodyGeo, bodyMat);
         this.mesh.castShadow = true;
         
-        // Add a little hat
-        const hatGeo = new THREE.ConeGeometry(0.25, 0.3, 8);
+        // Add a little hat (red propeller beanie)
+        const hatGeo = new THREE.ConeGeometry(0.3, 0.4, 8);
         const hatMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
         const hat = new THREE.Mesh(hatGeo, hatMat);
-        hat.position.y = 0.6;
+        hat.position.y = 0.8;
         this.mesh.add(hat);
+        
+        // Add floating exclamation mark when visible
+        const exclamGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.5, 8);
+        const exclamMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        this.exclamation = new THREE.Mesh(exclamGeo, exclamMat);
+        this.exclamation.position.y = 1.5;
+        this.mesh.add(this.exclamation);
+        
+        const dotGeo = new THREE.SphereGeometry(0.12, 8, 8);
+        const dot = new THREE.Mesh(dotGeo, exclamMat);
+        dot.position.y = 1.1;
+        this.mesh.add(dot);
         
         this.mesh.visible = false; // Hidden when in vehicle
         this.scene.add(this.mesh);

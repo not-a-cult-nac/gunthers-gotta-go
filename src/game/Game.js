@@ -157,6 +157,9 @@ export class Game {
             // Handle Gunther interactions
             this.handleGuntherInteractions(input);
             
+            // Sync Gunther visibility in vehicle
+            this.vehicle.setGuntherVisible(this.gunther.state === 'in_vehicle');
+            
             // Update HUD arrows
             const guntherDist = this.hudArrows.update(
                 this.goalPosition,

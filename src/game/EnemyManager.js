@@ -186,10 +186,21 @@ export class EnemyManager {
     }
     
     checkEnemyInteractions(enemy, vehicle, gunther, player) {
-        // Killer damages vehicle
+        // Check if vehicle runs over enemy
+        const distToVehicle = enemy.position.distanceTo(vehicle.position);
+        if (distToVehicle < 3 && Math.abs(vehicle.speed) > 5) {
+            // Vehicle is moving fast and close - run over!
+            enemy.takeDamage(100); // Instant kill
+            if (this.audioManager) {
+                this.audioManager.playHit();
+            }
+            return; // Enemy is dead, skip other checks
+        }
+        
+        // Killer damages vehicle (only if close and vehicle is slow)
         if (enemy.type === 'killer') {
             const dist = enemy.position.distanceTo(vehicle.position);
-            if (dist < 4) {
+            if (dist < 4 && Math.abs(vehicle.speed) < 5) {
                 vehicle.takeDamage(1);
                 // Push enemy back
                 const pushDir = enemy.position.clone().sub(vehicle.position).normalize();

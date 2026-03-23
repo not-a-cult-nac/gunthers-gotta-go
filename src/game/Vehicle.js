@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import { GameConfig } from './GameConfig.js';
 import { createVehicleModel } from './models/VehicleModel.js';
+import { createPlayerModel } from './models/PlayerModel.js';
+import { createGuntherModel } from './models/GuntherModel.js';
 
 export class Vehicle {
     constructor(scene, physicsWorld, RAPIER) {
@@ -37,6 +39,21 @@ export class Vehicle {
         this.mesh.position.copy(this.position);
         this.scene.add(this.mesh);
         
+        // Add driver model (player) in driver seat
+        this.driverModel = createPlayerModel();
+        this.driverModel.position.set(0.7, 0.8, 0.8); // Driver seat (local coords)
+        this.driverModel.scale.setScalar(0.8); // Slightly smaller to fit
+        this.mesh.add(this.driverModel);
+        
+        // Add Gunther in back middle seat
+        this.guntherModel = createGuntherModel();
+        this.guntherModel.position.set(0, 0.8, -1.2); // Back middle seat
+        this.guntherModel.scale.setScalar(0.9);
+        // Remove the floating marker for seated Gunther
+        const marker = this.guntherModel.getObjectByName('marker');
+        if (marker) marker.visible = false;
+        this.mesh.add(this.guntherModel);
+        
         // Physics body
         const rigidBodyDesc = this.RAPIER.RigidBodyDesc.kinematicPositionBased()
             .setTranslation(this.position.x, this.position.y, this.position.z);
@@ -45,6 +62,12 @@ export class Vehicle {
         // Collider
         const colliderDesc = this.RAPIER.ColliderDesc.cuboid(1.6, 0.8, 2.5);
         this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
+    }
+    
+    setGuntherVisible(visible) {
+        if (this.guntherModel) {
+            this.guntherModel.visible = visible;
+        }
     }
     
     update(delta, input, player, world) {
@@ -88,7 +111,7 @@ export class Vehicle {
         // Get terrain height if world provided
         if (world) {
             const terrainY = world.getHeightAt(this.position.x, this.position.z);
-            this.position.y = terrainY + 0.5; // Wheels touch ground
+            this.position.y = terrainY; // Wheels on ground (model has wheels at y=0.5)
         }
         
         // Clamp to world bounds

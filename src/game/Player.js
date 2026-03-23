@@ -133,15 +133,24 @@ export class Player {
             lookTarget.x += Math.sin(vehicle.rotation) * 5;
             this.camera.lookAt(lookTarget);
         } else {
-            // First person camera - from driver seat position
-            const seatOffset = new THREE.Vector3(0.7, 2.3, 0.8); // Driver seat
+            // First person camera - from driver's eye level, looking forward
+            // Position slightly forward and higher to be at eye level, not inside head
+            const seatOffset = new THREE.Vector3(0.5, 2.5, 1.2); // Forward of driver seat, eye height
             seatOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), vehicle.rotation);
             this.camera.position.copy(vehicle.position).add(seatOffset);
             
-            // Look direction based on vehicle rotation + mouse look
-            this.camera.rotation.order = 'YXZ';
-            this.camera.rotation.y = vehicle.rotation + this.rotation.y;
-            this.camera.rotation.x = this.rotation.x;
+            // Look forward (in vehicle direction) with mouse offset
+            const lookDir = new THREE.Vector3(
+                Math.sin(vehicle.rotation),
+                0,
+                Math.cos(vehicle.rotation)
+            );
+            const lookTarget = this.camera.position.clone().add(lookDir.multiplyScalar(10));
+            lookTarget.y += this.rotation.x * -5; // Mouse Y affects look height
+            lookTarget.x += Math.sin(vehicle.rotation + Math.PI/2) * this.rotation.y * 5;
+            lookTarget.z += Math.cos(vehicle.rotation + Math.PI/2) * this.rotation.y * 5;
+            
+            this.camera.lookAt(lookTarget);
         }
         
         this.mesh.visible = false;

@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { GameConfig } from './GameConfig.js';
+import { createPlayerModel, createGunViewModel } from './models/PlayerModel.js';
 
 export class Player {
     constructor(scene, physicsWorld, RAPIER, camera, audioManager) {
@@ -14,6 +15,7 @@ export class Player {
         this.audioManager = audioManager;
         
         this.mesh = null;
+        this.gunViewModel = null;
         this.rigidBody = null;
         
         this.position = new THREE.Vector3(0, 1, GameConfig.START_Z);
@@ -34,22 +36,20 @@ export class Player {
         this.interactCooldown = 0;
         
         // Camera mode
-        this.thirdPerson = true; // Default to third person in vehicle
+        this.thirdPerson = true;
     }
     
     init() {
-        // Player mesh (simple capsule)
-        const bodyGeo = new THREE.CapsuleGeometry(0.4, 1.2, 8, 16);
-        const bodyMat = new THREE.MeshStandardMaterial({
-            color: 0x3366aa,
-            roughness: 0.6,
-        });
-        this.mesh = new THREE.Mesh(bodyGeo, bodyMat);
-        this.mesh.castShadow = true;
-        this.mesh.visible = false; // Hidden when in vehicle (first person)
-        
+        // Player mesh
+        this.mesh = createPlayerModel();
+        this.mesh.visible = false;
         this.mesh.position.copy(this.position);
         this.scene.add(this.mesh);
+        
+        // First person gun view
+        this.gunViewModel = createGunViewModel();
+        this.gunViewModel.visible = false;
+        this.scene.add(this.gunViewModel);
         
         // Physics body
         const rigidBodyDesc = this.RAPIER.RigidBodyDesc.kinematicPositionBased()
@@ -61,7 +61,7 @@ export class Player {
         this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
     }
     
-    update(delta, input, vehicle) {
+    update(delta, input, vehicle, world) {
         this.vehicle = vehicle;
         
         // Cooldowns
@@ -85,7 +85,7 @@ export class Player {
         if (this.inVehicle) {
             this.updateInVehicle(delta, input, vehicle);
         } else {
-            this.updateOnFoot(delta, input, vehicle);
+            this.updateOnFoot(delta, input, vehicle, world);
         }
         
         // Handle shooting
@@ -105,10 +105,12 @@ export class Player {
         
         // Update bullets
         this.updateBullets(delta);
+        
+        // Update gun view model position
+        this.updateGunViewModel();
     }
     
     updateInVehicle(delta, input, vehicle) {
-        // Position follows vehicle
         this.position.copy(vehicle.position);
         this.position.y += 1;
         
@@ -117,7 +119,6 @@ export class Player {
             const cameraDistance = 12;
             const cameraHeight = 6;
             
-            // Camera looks at vehicle, offset behind based on vehicle rotation
             const cameraOffset = new THREE.Vector3(
                 -Math.sin(vehicle.rotation) * cameraDistance,
                 cameraHeight,
@@ -126,7 +127,6 @@ export class Player {
             
             this.camera.position.copy(vehicle.position).add(cameraOffset);
             
-            // Look at a point slightly ahead of vehicle
             const lookTarget = vehicle.position.clone();
             lookTarget.y += 2;
             lookTarget.z += Math.cos(vehicle.rotation) * 5;
@@ -140,11 +140,11 @@ export class Player {
             this.camera.rotation.x = this.rotation.x;
         }
         
-        // Hide player mesh
         this.mesh.visible = false;
+        this.gunViewModel.visible = !this.thirdPerson;
     }
     
-    updateOnFoot(delta, input, vehicle) {
+    updateOnFoot(delta, input, vehicle, world) {
         // Movement
         const moveSpeed = GameConfig.PLAYER_SPEED;
         const moveDir = new THREE.Vector3();
@@ -156,10 +156,13 @@ export class Player {
         
         if (moveDir.length() > 0) {
             moveDir.normalize();
-            // Rotate movement by camera yaw
             moveDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
             this.position.add(moveDir.multiplyScalar(moveSpeed * delta));
         }
+        
+        // Get terrain height
+        const terrainY = world ? world.getHeightAt(this.position.x, this.position.z) : 0;
+        this.position.y = terrainY + 1;
         
         // Clamp to world
         this.position.x = Math.max(-GameConfig.WORLD_WIDTH + 2, Math.min(GameConfig.WORLD_WIDTH - 2, this.position.x));
@@ -167,20 +170,18 @@ export class Player {
         
         // Update mesh
         this.mesh.position.copy(this.position);
+        this.mesh.position.y = terrainY;
         this.mesh.rotation.y = this.rotation.y;
         this.mesh.visible = true;
         
-        // Camera - third person offset or first person
-        const cameraOffset = new THREE.Vector3(0, 2, 4);
-        cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
-        this.camera.position.copy(this.position).add(cameraOffset);
-        this.camera.lookAt(this.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
-        
-        // Actually use first person for consistency
-        this.camera.position.copy(this.position).add(new THREE.Vector3(0, 1.6, 0));
+        // First person camera when on foot
+        this.camera.position.copy(this.position).add(new THREE.Vector3(0, 0.9, 0));
         this.camera.rotation.order = 'YXZ';
         this.camera.rotation.y = this.rotation.y;
         this.camera.rotation.x = this.rotation.x;
+        
+        // Show gun view
+        this.gunViewModel.visible = true;
         
         // Update physics
         this.rigidBody.setNextKinematicTranslation({
@@ -190,20 +191,36 @@ export class Player {
         });
     }
     
+    updateGunViewModel() {
+        if (!this.gunViewModel.visible) return;
+        
+        // Position gun in lower right of view
+        const gunOffset = new THREE.Vector3(0.25, -0.2, -0.5);
+        gunOffset.applyQuaternion(this.camera.quaternion);
+        
+        this.gunViewModel.position.copy(this.camera.position).add(gunOffset);
+        this.gunViewModel.rotation.copy(this.camera.rotation);
+    }
+    
     shoot() {
         if (this.shootCooldown > 0) return;
         
         this.shootCooldown = GameConfig.PLAYER_SHOOT_COOLDOWN;
         
-        // Create bullet with trail effect
-        const bulletGeo = new THREE.SphereGeometry(0.15, 8, 8);
-        const bulletMat = new THREE.MeshBasicMaterial({ 
-            color: 0xffff00,
-        });
+        // Create bullet
+        const bulletGeo = new THREE.SphereGeometry(0.1, 8, 8);
+        const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
         const bullet = new THREE.Mesh(bulletGeo, bulletMat);
         
+        // Direction from camera
+        const direction = new THREE.Vector3(0, 0, -1);
+        direction.applyQuaternion(this.camera.quaternion);
+        
+        bullet.position.copy(this.camera.position);
+        bullet.position.add(direction.clone().multiplyScalar(1));
+        
         // Add trail
-        const trailGeo = new THREE.CylinderGeometry(0.05, 0.1, 1, 8);
+        const trailGeo = new THREE.CylinderGeometry(0.03, 0.06, 0.8, 6);
         const trailMat = new THREE.MeshBasicMaterial({ 
             color: 0xffaa00,
             transparent: true,
@@ -211,15 +228,8 @@ export class Player {
         });
         const trail = new THREE.Mesh(trailGeo, trailMat);
         trail.rotation.x = Math.PI / 2;
-        trail.position.z = 0.5;
+        trail.position.z = 0.4;
         bullet.add(trail);
-        
-        // Start position (from camera, slightly forward)
-        const direction = new THREE.Vector3(0, 0, -1);
-        direction.applyQuaternion(this.camera.quaternion);
-        
-        bullet.position.copy(this.camera.position);
-        bullet.position.add(direction.clone().multiplyScalar(2)); // Start 2 units ahead
         
         bullet.userData = {
             velocity: direction.multiplyScalar(100),
@@ -240,13 +250,9 @@ export class Player {
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const bullet = this.bullets[i];
             
-            // Move bullet
             bullet.position.add(bullet.userData.velocity.clone().multiplyScalar(delta));
-            
-            // Reduce lifetime
             bullet.userData.lifetime -= delta;
             
-            // Remove dead bullets
             if (bullet.userData.lifetime <= 0 || bullet.position.y < 0) {
                 this.scene.remove(bullet);
                 this.bullets.splice(i, 1);
@@ -278,9 +284,11 @@ export class Player {
     
     takeDamage(amount) {
         this.health = Math.max(0, this.health - amount);
+        if (this.audioManager) {
+            this.audioManager.playHit();
+        }
     }
     
-    // Get carrying position (above head)
     getCarryPosition() {
         return this.position.clone().add(new THREE.Vector3(0, 2.5, 0));
     }

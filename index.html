@@ -224,21 +224,24 @@
     <div id="gunther-speech"></div>
     <div id="crosshair"></div>
     
-    <!-- Gunther direction indicator -->
+    <!-- Gunther distance indicator (3D arrows handle direction) -->
     <div id="gunther-indicator" style="
         position: absolute;
         top: 80px;
         left: 50%;
         transform: translateX(-50%);
         color: #ffcc00;
-        font-size: 24px;
+        font-size: 20px;
         font-weight: bold;
         text-shadow: 2px 2px 4px #000;
         z-index: 100;
         display: none;
         text-align: center;
+        background: rgba(0,0,0,0.5);
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: 2px solid #ffcc00;
     ">
-        <div id="gunther-arrow" style="font-size: 36px;">⬆</div>
         <div id="gunther-dist">GUNTHER: 0m</div>
     </div>
     

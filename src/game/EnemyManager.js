@@ -4,53 +4,30 @@
 
 import * as THREE from 'three';
 import { GameConfig } from './GameConfig.js';
+import { createEnemyModel } from './models/EnemyModel.js';
 
 class Enemy {
     constructor(scene, type, position) {
         this.scene = scene;
-        this.type = type; // 'stealer' or 'killer'
+        this.type = type;
         this.position = position.clone();
         this.velocity = new THREE.Vector3();
         this.health = GameConfig.ENEMY_HEALTH;
         this.hasGunther = false;
         this.isDead = false;
         
-        // Speed varies by type
         const baseSpeed = GameConfig.ENEMY_BASE_SPEED;
         this.speed = type === 'killer' 
             ? baseSpeed * 1.45 
             : baseSpeed * 1.2;
-        this.speed *= 0.9 + Math.random() * 0.2; // Slight variation
+        this.speed *= 0.9 + Math.random() * 0.2;
         
-        this.createMesh();
-    }
-    
-    createMesh() {
-        // Enemy mesh - different colors by type, larger and more visible
-        const bodyGeo = new THREE.CapsuleGeometry(0.6, 1.5, 8, 16);
-        const color = this.type === 'killer' ? 0xff0000 : 0x9900ff;
-        const bodyMat = new THREE.MeshStandardMaterial({
-            color: color,
-            roughness: 0.5,
-            emissive: color,
-            emissiveIntensity: 0.3, // Slight glow
-        });
-        this.mesh = new THREE.Mesh(bodyGeo, bodyMat);
-        this.mesh.castShadow = true;
+        this.mesh = createEnemyModel(type);
         this.mesh.position.copy(this.position);
         this.scene.add(this.mesh);
-        
-        // Add a floating indicator above head
-        const indicatorGeo = new THREE.SphereGeometry(0.3, 8, 8);
-        const indicatorMat = new THREE.MeshBasicMaterial({
-            color: this.type === 'killer' ? 0xff0000 : 0xff00ff,
-        });
-        const indicator = new THREE.Mesh(indicatorGeo, indicatorMat);
-        indicator.position.y = 1.5;
-        this.mesh.add(indicator);
     }
     
-    update(delta, target, gunther) {
+    update(delta, target, world) {
         if (this.isDead) return;
         
         // Move toward target
@@ -64,6 +41,11 @@ class Enemy {
             this.position.add(this.velocity.clone().multiplyScalar(delta));
         }
         
+        // Get terrain height
+        if (world) {
+            this.position.y = world.getHeightAt(this.position.x, this.position.z);
+        }
+        
         // Face movement direction
         if (this.velocity.length() > 0.1) {
             this.mesh.rotation.y = Math.atan2(this.velocity.x, this.velocity.z);
@@ -71,18 +53,26 @@ class Enemy {
         
         // Update mesh
         this.mesh.position.copy(this.position);
-        this.mesh.position.y = 0.8; // Offset for capsule center
     }
     
     takeDamage(amount) {
         this.health -= amount;
         
-        // Flash red
-        this.mesh.material.emissive = new THREE.Color(0xffffff);
-        this.mesh.material.emissiveIntensity = 0.5;
+        // Flash white
+        this.mesh.traverse(child => {
+            if (child.isMesh) {
+                child.material.emissive = new THREE.Color(0xffffff);
+                child.material.emissiveIntensity = 1.0;
+            }
+        });
+        
         setTimeout(() => {
-            if (this.mesh.material) {
-                this.mesh.material.emissiveIntensity = 0;
+            if (this.mesh) {
+                this.mesh.traverse(child => {
+                    if (child.isMesh) {
+                        child.material.emissiveIntensity = 0;
+                    }
+                });
             }
         }, 100);
         
@@ -94,28 +84,45 @@ class Enemy {
     die() {
         this.isDead = true;
         this.hasGunther = false;
-        this.scene.remove(this.mesh);
-        this.mesh.geometry.dispose();
-        this.mesh.material.dispose();
+        
+        // Death animation - scale down and remove
+        const mesh = this.mesh;
+        const scene = this.scene;
+        
+        let scale = 1;
+        const shrink = () => {
+            scale -= 0.1;
+            if (scale > 0) {
+                mesh.scale.setScalar(scale);
+                requestAnimationFrame(shrink);
+            } else {
+                scene.remove(mesh);
+                mesh.traverse(child => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+        };
+        shrink();
     }
 }
 
 export class EnemyManager {
-    constructor(scene, physicsWorld, RAPIER) {
+    constructor(scene, physicsWorld, RAPIER, audioManager) {
         this.scene = scene;
         this.physicsWorld = physicsWorld;
         this.RAPIER = RAPIER;
+        this.audioManager = audioManager;
         
         this.enemies = [];
         this.spawnTimer = 0;
     }
     
     init() {
-        // Spawn initial enemies
-        // (They'll spawn when vehicle starts moving)
+        // Enemies spawn when vehicle starts moving
     }
     
-    update(delta, vehicle, gunther, player) {
+    update(delta, vehicle, gunther, player, world) {
         // Spawn new enemies
         this.spawnTimer += delta;
         if (this.spawnTimer >= GameConfig.ENEMY_SPAWN_INTERVAL) {
@@ -125,7 +132,7 @@ export class EnemyManager {
             }
         }
         
-        // Spawn initial enemies if we have none
+        // Spawn initial enemies
         if (this.enemies.length === 0 && vehicle.position.z > GameConfig.START_Z + 10) {
             for (let i = 0; i < GameConfig.ENEMY_INITIAL_COUNT; i++) {
                 this.spawnEnemy(vehicle);
@@ -139,10 +146,8 @@ export class EnemyManager {
             // Determine target
             let target;
             if (enemy.type === 'killer') {
-                // Killers target the vehicle
                 target = vehicle.position.clone();
             } else {
-                // Stealers target Gunther (or vehicle if Gunther is inside)
                 if (gunther.state === 'in_vehicle') {
                     target = vehicle.position.clone();
                 } else {
@@ -150,9 +155,8 @@ export class EnemyManager {
                 }
             }
             
-            enemy.update(delta, target, gunther);
+            enemy.update(delta, target, world);
             
-            // Check interactions
             this.checkEnemyInteractions(enemy, vehicle, gunther, player);
         }
         
@@ -164,11 +168,10 @@ export class EnemyManager {
     }
     
     spawnEnemy(vehicle) {
-        // Spawn ahead of vehicle
         const minZ = Math.max(GameConfig.START_Z + 30, vehicle.position.z + GameConfig.ENEMY_SPAWN_AHEAD_MIN);
         const maxZ = Math.min(GameConfig.GOAL_Z - 30, vehicle.position.z + GameConfig.ENEMY_SPAWN_AHEAD_MAX);
         
-        if (minZ >= maxZ) return; // Can't spawn
+        if (minZ >= maxZ) return;
         
         const side = Math.random() > 0.5 ? 1 : -1;
         const position = new THREE.Vector3(
@@ -206,11 +209,10 @@ export class EnemyManager {
         
         // Enemy with Gunther runs away
         if (enemy.hasGunther) {
-            // Run away from vehicle
             const awayDir = enemy.position.clone().sub(vehicle.position);
             awayDir.y = 0;
             awayDir.normalize();
-            enemy.position.add(awayDir.multiplyScalar(enemy.speed * 0.016)); // Fixed delta for simplicity
+            enemy.position.add(awayDir.multiplyScalar(enemy.speed * 0.016));
         }
         
         // Enemy damages player on foot
@@ -228,16 +230,14 @@ export class EnemyManager {
                 if (enemy.isDead) continue;
                 
                 const dist = bullet.position.distanceTo(enemy.mesh.position);
-                if (dist < 1) {
+                if (dist < 1.5) {
                     enemy.takeDamage(bullet.userData.damage);
+                    bullet.userData.lifetime = 0;
                     
-                    // If enemy had Gunther, release him
-                    if (enemy.hasGunther && enemy.isDead) {
-                        // Gunther will need to be released - handled by Gunther
+                    if (this.audioManager) {
+                        this.audioManager.playHit();
                     }
                     
-                    // Remove bullet
-                    bullet.userData.lifetime = 0;
                     break;
                 }
             }

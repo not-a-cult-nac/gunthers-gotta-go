@@ -11,13 +11,14 @@ import { EnemyManager } from './EnemyManager.js';
 import { InputManager } from './InputManager.js';
 import { UIManager } from './UIManager.js';
 import { AudioManager } from './AudioManager.js';
+import { HUDArrows } from './HUDArrows.js';
 import { GameConfig } from './GameConfig.js';
 
 export class Game {
     constructor(RAPIER) {
         this.RAPIER = RAPIER;
         this.isRunning = false;
-        this.gameState = 'waiting'; // waiting, playing, won, lost
+        this.gameState = 'waiting';
         
         // Three.js core
         this.scene = null;
@@ -36,19 +37,22 @@ export class Game {
         this.inputManager = null;
         this.uiManager = null;
         this.audioManager = null;
+        this.hudArrows = null;
+        
+        // Goal position for arrows
+        this.goalPosition = new THREE.Vector3(0, 0, GameConfig.GOAL_Z);
         
         // Timing
         this.clock = new THREE.Clock();
-        this.lastTime = 0;
     }
     
     async init() {
         // Create Three.js scene
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
-        this.scene.fog = new THREE.Fog(0x87CEEB, 50, 200);
+        this.scene.background = new THREE.Color(0x87CEEB);
+        this.scene.fog = new THREE.Fog(0x87CEEB, 50, 250);
         
-        // Camera - will be attached to player/vehicle
+        // Camera
         this.camera = new THREE.PerspectiveCamera(
             75,
             window.innerWidth / window.innerHeight,
@@ -85,13 +89,16 @@ export class Game {
         
         this.player = new Player(this.scene, this.physicsWorld, this.RAPIER, this.camera, this.audioManager);
         this.player.init();
-        this.player.enterVehicle(this.vehicle); // Start in vehicle
+        this.player.enterVehicle(this.vehicle);
         
         this.gunther = new Gunther(this.scene, this.physicsWorld, this.RAPIER, this.audioManager);
         this.gunther.init(this.vehicle);
         
-        this.enemyManager = new EnemyManager(this.scene, this.physicsWorld, this.RAPIER);
+        this.enemyManager = new EnemyManager(this.scene, this.physicsWorld, this.RAPIER, this.audioManager);
         this.enemyManager.init();
+        
+        // HUD arrows
+        this.hudArrows = new HUDArrows(this.scene, this.camera);
         
         // Handle window resize
         window.addEventListener('resize', () => this.onResize());
@@ -133,7 +140,7 @@ export class Game {
         
         requestAnimationFrame(() => this.animate());
         
-        const delta = Math.min(this.clock.getDelta(), 0.1); // Cap delta
+        const delta = Math.min(this.clock.getDelta(), 0.1);
         
         // Step physics
         this.physicsWorld.step();
@@ -142,13 +149,20 @@ export class Game {
         const input = this.inputManager.getState();
         
         if (this.gameState === 'playing') {
-            this.player.update(delta, input, this.vehicle);
-            this.vehicle.update(delta, input, this.player);
-            this.gunther.update(delta, this.vehicle, this.player, this.enemyManager.enemies);
-            this.enemyManager.update(delta, this.vehicle, this.gunther, this.player);
+            this.player.update(delta, input, this.vehicle, this.world);
+            this.vehicle.update(delta, input, this.player, this.world);
+            this.gunther.update(delta, this.vehicle, this.player, this.enemyManager.enemies, this.world);
+            this.enemyManager.update(delta, this.vehicle, this.gunther, this.player, this.world);
             
             // Handle Gunther interactions
             this.handleGuntherInteractions(input);
+            
+            // Update HUD arrows
+            const guntherDist = this.hudArrows.update(
+                this.goalPosition,
+                this.gunther.state,
+                this.gunther.position
+            );
             
             // Check win/lose conditions
             this.checkGameState();
@@ -164,7 +178,6 @@ export class Game {
     handleGuntherInteractions(input) {
         // Player tries to grab Gunther
         if (input.grab && !this.player.carryingGunther) {
-            // Check if Gunther is nearby and grabbable
             const dist = this.player.position.distanceTo(this.gunther.position);
             if (dist < 3 && (this.gunther.state === 'wandering' || this.gunther.state === 'trapped')) {
                 this.gunther.rescue(this.player);
@@ -226,6 +239,7 @@ export class Game {
         this.isRunning = false;
         document.exitPointerLock();
         this.uiManager.showEndScreen(true, reason);
+        this.audioManager.playWin();
     }
     
     lose(reason) {
@@ -233,6 +247,7 @@ export class Game {
         this.isRunning = false;
         document.exitPointerLock();
         this.uiManager.showEndScreen(false, reason);
+        this.audioManager.playLose();
     }
     
     onResize() {

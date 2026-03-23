@@ -99,6 +99,44 @@ export class AudioManager {
         osc.stop(this.context.currentTime + 0.5);
     }
     
+    // Win fanfare
+    playWin() {
+        if (!this.enabled || !this.context) return;
+        this.resume();
+        
+        [523, 659, 784, 1047].forEach((freq, i) => {
+            const osc = this.context.createOscillator();
+            const gain = this.context.createGain();
+            osc.type = 'sine';
+            osc.connect(gain);
+            gain.connect(this.context.destination);
+            osc.frequency.setValueAtTime(freq, this.context.currentTime + i * 0.15);
+            gain.gain.setValueAtTime(0.2, this.context.currentTime + i * 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + i * 0.15 + 0.3);
+            osc.start(this.context.currentTime + i * 0.15);
+            osc.stop(this.context.currentTime + i * 0.15 + 0.3);
+        });
+    }
+    
+    // Lose sound
+    playLose() {
+        if (!this.enabled || !this.context) return;
+        this.resume();
+        
+        [300, 280, 260, 200].forEach((freq, i) => {
+            const osc = this.context.createOscillator();
+            const gain = this.context.createGain();
+            osc.type = 'sine';
+            osc.connect(gain);
+            gain.connect(this.context.destination);
+            osc.frequency.setValueAtTime(freq, this.context.currentTime + i * 0.3);
+            gain.gain.setValueAtTime(0.15, this.context.currentTime + i * 0.3);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + i * 0.3 + 0.25);
+            osc.start(this.context.currentTime + i * 0.3);
+            osc.stop(this.context.currentTime + i * 0.3 + 0.25);
+        });
+    }
+    
     // Create white noise for effects
     createNoise(duration) {
         const bufferSize = this.context.sampleRate * duration;

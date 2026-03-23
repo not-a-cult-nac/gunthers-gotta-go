@@ -1,9 +1,10 @@
 /**
- * Gunther - the suicidal child you must escort
+ * Gunther - the suicidal robot German boy you must escort
  */
 
 import * as THREE from 'three';
 import { GameConfig } from './GameConfig.js';
+import { createGuntherModel } from './models/GuntherModel.js';
 
 export class Gunther {
     constructor(scene, physicsWorld, RAPIER, audioManager) {
@@ -27,64 +28,41 @@ export class Gunther {
         
         // References
         this.vehicle = null;
-        this.captor = null; // Enemy carrying Gunther
-        this.trapHazard = null; // Trap he's stuck in
+        this.captor = null;
+        this.trapHazard = null;
         
-        // UI callback
-        this.onSpeak = null;
+        // Animation
+        this.bobOffset = 0;
     }
     
     init(vehicle) {
         this.vehicle = vehicle;
         
-        // Gunther mesh - small child-like figure, bright and visible
-        const bodyGeo = new THREE.CapsuleGeometry(0.4, 0.8, 8, 16);
-        const bodyMat = new THREE.MeshStandardMaterial({
-            color: 0xffcc00, // Bright yellow (he's easy to spot!)
-            roughness: 0.6,
-            emissive: 0xffcc00,
-            emissiveIntensity: 0.2, // Slight glow
-        });
-        this.mesh = new THREE.Mesh(bodyGeo, bodyMat);
-        this.mesh.castShadow = true;
-        
-        // Add a little hat (red propeller beanie)
-        const hatGeo = new THREE.ConeGeometry(0.3, 0.4, 8);
-        const hatMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-        const hat = new THREE.Mesh(hatGeo, hatMat);
-        hat.position.y = 0.8;
-        this.mesh.add(hat);
-        
-        // Add floating exclamation mark when visible
-        const exclamGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.5, 8);
-        const exclamMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-        this.exclamation = new THREE.Mesh(exclamGeo, exclamMat);
-        this.exclamation.position.y = 1.5;
-        this.mesh.add(this.exclamation);
-        
-        const dotGeo = new THREE.SphereGeometry(0.12, 8, 8);
-        const dot = new THREE.Mesh(dotGeo, exclamMat);
-        dot.position.y = 1.1;
-        this.mesh.add(dot);
-        
-        this.mesh.visible = false; // Hidden when in vehicle
+        this.mesh = createGuntherModel();
+        this.mesh.visible = false;
         this.scene.add(this.mesh);
         
-        // Set initial position in vehicle
         this.position.copy(vehicle.getGuntherSeatPosition());
     }
     
-    update(delta, vehicle, player, enemies) {
+    update(delta, vehicle, player, enemies, world) {
         this.vehicle = vehicle;
         
         if (this.isDead) return;
+        
+        // Animate marker bobbing
+        this.bobOffset += delta * 3;
+        const marker = this.mesh.getObjectByName('marker');
+        if (marker) {
+            marker.position.y = 2.5 + Math.sin(this.bobOffset) * 0.2;
+        }
         
         switch (this.state) {
             case 'in_vehicle':
                 this.updateInVehicle(delta, vehicle, enemies);
                 break;
             case 'wandering':
-                this.updateWandering(delta, vehicle, player, enemies);
+                this.updateWandering(delta, vehicle, player, enemies, world);
                 break;
             case 'trapped':
                 this.updateTrapped(delta, player);
@@ -98,8 +76,8 @@ export class Gunther {
         }
         
         // Check for hazards
-        if (this.state === 'wandering') {
-            this.checkHazards();
+        if (this.state === 'wandering' && world) {
+            this.checkHazards(world);
         }
         
         // Update mesh position
@@ -107,13 +85,12 @@ export class Gunther {
     }
     
     updateInVehicle(delta, vehicle, enemies) {
-        // Follow vehicle
         this.position.copy(vehicle.getGuntherSeatPosition());
         this.mesh.visible = false;
         
         // Random escape chance
         this.escapeTimer += delta;
-        if (this.escapeTimer > 1) { // Check once per second
+        if (this.escapeTimer > 1) {
             this.escapeTimer = 0;
             if (Math.random() < GameConfig.GUNTHER_ESCAPE_RATE) {
                 this.escape();
@@ -121,7 +98,7 @@ export class Gunther {
         }
     }
     
-    updateWandering(delta, vehicle, player, enemies) {
+    updateWandering(delta, vehicle, player, enemies, world) {
         this.mesh.visible = true;
         
         // Pick new target if needed
@@ -146,6 +123,11 @@ export class Gunther {
             }
         }
         
+        // Get terrain height
+        if (world) {
+            this.position.y = world.getHeightAt(this.position.x, this.position.z);
+        }
+        
         // Face movement direction
         if (this.targetPosition) {
             const angle = Math.atan2(
@@ -154,15 +136,9 @@ export class Gunther {
             );
             this.mesh.rotation.y = angle;
         }
-        
-        // Check if player grabs
-        if (player.carryingGunther) {
-            // Handled by player
-        }
     }
     
     pickNewTarget(enemies) {
-        // Gunther is attracted to danger!
         const dangerTargets = [];
         
         // Add hazards as targets
@@ -183,7 +159,7 @@ export class Gunther {
                 if (dist < 30) {
                     dangerTargets.push({
                         position: enemy.position.clone(),
-                        attraction: 0.9, // Really wants that candy
+                        attraction: 0.9,
                     });
                 }
             }
@@ -191,7 +167,6 @@ export class Gunther {
         
         // Pick random target weighted by attraction
         if (dangerTargets.length > 0 && Math.random() < 0.7) {
-            // Sort by attraction and pick from top
             dangerTargets.sort((a, b) => b.attraction - a.attraction);
             this.targetPosition = dangerTargets[0].position.clone();
             this.targetPosition.y = 0;
@@ -208,15 +183,8 @@ export class Gunther {
     updateTrapped(delta, player) {
         this.mesh.visible = true;
         
-        // Stay at trap position
         if (this.trapHazard) {
             this.position.set(this.trapHazard.x, 0.5, this.trapHazard.z);
-        }
-        
-        // Player can rescue by being close and pressing grab
-        const dist = this.position.distanceTo(player.position);
-        if (dist < 3) {
-            // Player will handle rescue via input
         }
     }
     
@@ -228,34 +196,25 @@ export class Gunther {
     updateKidnapped(delta) {
         this.mesh.visible = true;
         
-        // Follow captor
         if (this.captor) {
             this.position.copy(this.captor.position);
             this.position.y += 1.5;
             
-            // Check if captor escapes with Gunther
             if (this.captor.position.distanceTo(this.vehicle.position) > 60) {
                 this.die('enemy', 'The enemy escaped with Gunther!');
             }
         }
     }
     
-    checkHazards() {
-        for (const hazard of GameConfig.HAZARDS) {
-            const dist = Math.sqrt(
-                (this.position.x - hazard.x) ** 2 +
-                (this.position.z - hazard.z) ** 2
-            );
-            
-            if (dist < hazard.radius) {
-                if (hazard.type === 'lava') {
-                    this.die('lava', GameConfig.QUOTES.death.lava);
-                } else if (hazard.type === 'cliff') {
-                    this.die('cliff', GameConfig.QUOTES.death.cliff);
-                } else if (hazard.type === 'trap' && this.state !== 'trapped') {
-                    this.getTrapped(hazard);
-                }
-                return;
+    checkHazards(world) {
+        const hazard = world.getHazardAt(this.position.x, this.position.z);
+        if (hazard) {
+            if (hazard.type === 'lava') {
+                this.die('lava', GameConfig.QUOTES.death.lava);
+            } else if (hazard.type === 'cliff') {
+                this.die('cliff', GameConfig.QUOTES.death.cliff);
+            } else if (hazard.type === 'trap' && this.state !== 'trapped') {
+                this.getTrapped(hazard);
             }
         }
     }
@@ -294,6 +253,10 @@ export class Gunther {
         enemy.hasGunther = true;
         
         this.speak("Nein! Ze adventure vas just beginning!");
+        
+        if (this.audioManager) {
+            this.audioManager.playAlert();
+        }
     }
     
     rescue(player) {
@@ -302,6 +265,9 @@ export class Gunther {
             this.captor = null;
             this.trapHazard = null;
             player.carryingGunther = true;
+            
+            const quote = GameConfig.QUOTES.carried[Math.floor(Math.random() * GameConfig.QUOTES.carried.length)];
+            this.speak(quote);
         }
     }
     

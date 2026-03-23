@@ -260,7 +260,7 @@ export class Gunther {
     }
     
     rescue(player) {
-        if (this.state === 'trapped' || this.state === 'kidnapped') {
+        if (this.state === 'trapped' || this.state === 'kidnapped' || this.state === 'wandering') {
             this.state = 'carried';
             this.captor = null;
             this.trapHazard = null;
@@ -269,6 +269,13 @@ export class Gunther {
             const quote = GameConfig.QUOTES.carried[Math.floor(Math.random() * GameConfig.QUOTES.carried.length)];
             this.speak(quote);
         }
+    }
+    
+    throwTo(targetPos) {
+        // Land at target position and start wandering
+        this.state = 'wandering';
+        this.position.copy(targetPos);
+        this.mesh.visible = true;
     }
     
     putInVehicle() {

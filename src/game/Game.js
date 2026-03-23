@@ -179,28 +179,33 @@ export class Game {
     }
     
     handleGuntherInteractions(input) {
-        // Player tries to grab Gunther
-        if (input.grab && !this.player.carryingGunther) {
+        // Only handle grab/throw when on foot
+        if (this.player.inVehicle) return;
+        
+        // SPACE to grab Gunther (when not carrying)
+        if (input.grab && !this.player.carryingGunther && this.player.interactCooldown <= 0) {
             const dist = this.player.position.distanceTo(this.gunther.position);
-            if (dist < 3 && (this.gunther.state === 'wandering' || this.gunther.state === 'trapped')) {
+            if (dist < 4 && (this.gunther.state === 'wandering' || this.gunther.state === 'trapped' || this.gunther.state === 'kidnapped')) {
+                // Can rescue from kidnapper too if close enough
+                if (this.gunther.state === 'kidnapped' && this.gunther.captor) {
+                    this.gunther.captor.hasGunther = false;
+                }
                 this.gunther.rescue(this.player);
+                this.player.interactCooldown = 0.3;
             }
         }
         
-        // Player is carrying Gunther
-        if (this.player.carryingGunther && this.gunther.state === 'carried') {
-            // If player enters vehicle while carrying, put Gunther in too
-            if (this.player.inVehicle) {
-                this.gunther.putInVehicle();
-                this.player.carryingGunther = false;
-            }
-            
-            // Drop Gunther with grab key when already carrying
-            if (input.grab && this.player.interactCooldown <= 0) {
-                this.gunther.dropFromCarry();
-                this.player.carryingGunther = false;
-                this.player.interactCooldown = 0.3;
-            }
+        // SPACE to throw Gunther (when carrying)
+        if (input.grab && this.player.carryingGunther && this.gunther.state === 'carried' && this.player.interactCooldown <= 0) {
+            // Throw Gunther in direction player is facing
+            this.throwGunther();
+            this.player.interactCooldown = 0.3;
+        }
+        
+        // If player enters vehicle while carrying (handled by E key)
+        if (this.player.carryingGunther && this.player.inVehicle) {
+            this.gunther.putInVehicle();
+            this.player.carryingGunther = false;
         }
         
         // If enemy carrying Gunther is killed, free Gunther
@@ -209,6 +214,24 @@ export class Game {
             this.gunther.captor = null;
             this.gunther.speak("I am FREE! Now where is ze danger?");
         }
+    }
+    
+    throwGunther() {
+        // Throw Gunther in direction player is facing
+        const throwDistance = 8;
+        const throwDir = new THREE.Vector3(
+            Math.sin(this.player.rotation.y),
+            0.3, // Slight upward arc
+            Math.cos(this.player.rotation.y)
+        ).normalize();
+        
+        const landingPos = this.player.position.clone().add(throwDir.multiplyScalar(throwDistance));
+        landingPos.y = this.world.getHeightAt(landingPos.x, landingPos.z);
+        
+        this.gunther.throwTo(landingPos);
+        this.player.carryingGunther = false;
+        
+        this.gunther.speak("WHEEEEE!");
     }
     
     checkGameState() {

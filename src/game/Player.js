@@ -88,8 +88,8 @@ export class Player {
             this.updateOnFoot(delta, input, vehicle, world);
         }
         
-        // Handle shooting
-        if (input.shoot) {
+        // Handle shooting (only on foot, not in vehicle)
+        if (input.shoot && !this.inVehicle) {
             this.shoot();
         }
         
@@ -277,6 +277,9 @@ export class Player {
         this.inVehicle = true;
         this.vehicle = vehicle;
         vehicle.hasDriver = true;
+        // Reset mouse look when entering vehicle
+        this.rotation.x = 0;
+        this.rotation.y = 0;
         this.mesh.visible = false;
     }
     
@@ -286,6 +289,9 @@ export class Player {
         this.position.copy(vehicle.getExitPosition());
         this.position.y = 1;
         this.mesh.visible = true;
+        // Reset mouse look when exiting vehicle
+        this.rotation.x = 0;
+        this.rotation.y = vehicle.rotation; // Face same direction as vehicle
     }
     
     tryEnterVehicle(vehicle) {

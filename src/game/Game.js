@@ -196,8 +196,18 @@ export class Game {
         // Rest only applies when on foot
         if (this.player.inVehicle) return;
         
+        // Track space key state for edge detection
+        const spaceJustPressed = input.grab && !this.lastGrabState;
+        this.lastGrabState = input.grab;
+        
+        // SPACE to throw Gunther (when carrying) - check FIRST so it takes priority
+        if (spaceJustPressed && this.player.carryingGunther && this.gunther.state === 'carried') {
+            this.throwGunther();
+            return; // Don't process grab in same frame
+        }
+        
         // SPACE to grab Gunther (when not carrying)
-        if (input.grab && !this.player.carryingGunther && this.player.interactCooldown <= 0) {
+        if (spaceJustPressed && !this.player.carryingGunther) {
             const dist = this.player.position.distanceTo(this.gunther.position);
             if (dist < 4 && (this.gunther.state === 'wandering' || this.gunther.state === 'trapped' || this.gunther.state === 'kidnapped')) {
                 // Can rescue from kidnapper too if close enough
@@ -205,14 +215,7 @@ export class Game {
                     this.gunther.captor.hasGunther = false;
                 }
                 this.gunther.rescue(this.player);
-                this.player.interactCooldown = 0.3;
             }
-        }
-        
-        // SPACE to throw Gunther (when carrying)
-        if (input.grab && this.player.carryingGunther && this.gunther.state === 'carried' && this.player.interactCooldown <= 0) {
-            this.throwGunther();
-            this.player.interactCooldown = 0.5; // Longer cooldown for throw
         }
     }
     

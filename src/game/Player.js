@@ -133,10 +133,14 @@ export class Player {
             lookTarget.x += Math.sin(vehicle.rotation) * 5;
             this.camera.lookAt(lookTarget);
         } else {
-            // First person camera
-            this.camera.position.copy(this.position);
+            // First person camera - from driver seat position
+            const seatOffset = new THREE.Vector3(0.7, 2.3, 0.8); // Driver seat
+            seatOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), vehicle.rotation);
+            this.camera.position.copy(vehicle.position).add(seatOffset);
+            
+            // Look direction based on vehicle rotation + mouse look
             this.camera.rotation.order = 'YXZ';
-            this.camera.rotation.y = this.rotation.y;
+            this.camera.rotation.y = vehicle.rotation + this.rotation.y;
             this.camera.rotation.x = this.rotation.x;
         }
         

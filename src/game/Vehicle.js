@@ -88,7 +88,7 @@ export class Vehicle {
         // Get terrain height if world provided
         if (world) {
             const terrainY = world.getHeightAt(this.position.x, this.position.z);
-            this.position.y = terrainY + 0.8;
+            this.position.y = terrainY + 0.5; // Wheels touch ground
         }
         
         // Clamp to world bounds

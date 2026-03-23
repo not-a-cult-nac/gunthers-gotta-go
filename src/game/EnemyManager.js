@@ -229,8 +229,12 @@ export class EnemyManager {
             for (const enemy of this.enemies) {
                 if (enemy.isDead) continue;
                 
-                const dist = bullet.position.distanceTo(enemy.mesh.position);
-                if (dist < 1.5) {
+                // Check collision with enemy body (center mass at y+1)
+                const enemyCenter = enemy.position.clone();
+                enemyCenter.y += 1; // Enemy center is about 1m above ground
+                
+                const dist = bullet.position.distanceTo(enemyCenter);
+                if (dist < 2) { // Larger hitbox for easier hits
                     enemy.takeDamage(bullet.userData.damage);
                     bullet.userData.lifetime = 0;
                     

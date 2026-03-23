@@ -32,6 +32,10 @@ export class Vehicle {
         
         // Wheel rotation
         this.wheelRotation = 0;
+        
+        // Terrain tilt
+        this.pitch = 0;
+        this.roll = 0;
     }
     
     init() {
@@ -108,19 +112,45 @@ export class Vehicle {
         
         this.position.add(this.velocity.clone().multiplyScalar(delta));
         
-        // Get terrain height if world provided
+        // Get terrain height and slope if world provided
         if (world) {
             const terrainY = world.getHeightAt(this.position.x, this.position.z);
-            this.position.y = terrainY; // Wheels on ground (model has wheels at y=0.5)
+            this.position.y = terrainY;
+            
+            // Calculate terrain slope for vehicle tilt
+            const sampleDist = 2; // Distance to sample for slope
+            
+            // Forward/back slope (pitch)
+            const frontZ = this.position.z + Math.cos(this.rotation) * sampleDist;
+            const frontX = this.position.x + Math.sin(this.rotation) * sampleDist;
+            const backZ = this.position.z - Math.cos(this.rotation) * sampleDist;
+            const backX = this.position.x - Math.sin(this.rotation) * sampleDist;
+            const frontY = world.getHeightAt(frontX, frontZ);
+            const backY = world.getHeightAt(backX, backZ);
+            const pitch = Math.atan2(backY - frontY, sampleDist * 2);
+            
+            // Left/right slope (roll)
+            const leftZ = this.position.z + Math.cos(this.rotation + Math.PI/2) * sampleDist;
+            const leftX = this.position.x + Math.sin(this.rotation + Math.PI/2) * sampleDist;
+            const rightZ = this.position.z + Math.cos(this.rotation - Math.PI/2) * sampleDist;
+            const rightX = this.position.x + Math.sin(this.rotation - Math.PI/2) * sampleDist;
+            const leftY = world.getHeightAt(leftX, leftZ);
+            const rightY = world.getHeightAt(rightX, rightZ);
+            const roll = Math.atan2(leftY - rightY, sampleDist * 2);
+            
+            // Store for camera use
+            this.pitch = pitch;
+            this.roll = roll;
         }
         
         // Clamp to world bounds
         this.position.x = Math.max(-GameConfig.WORLD_WIDTH + 5, Math.min(GameConfig.WORLD_WIDTH - 5, this.position.x));
         this.position.z = Math.max(GameConfig.START_Z - 10, Math.min(GameConfig.GOAL_Z + 20, this.position.z));
         
-        // Update mesh
+        // Update mesh with terrain tilt
         this.mesh.position.copy(this.position);
-        this.mesh.rotation.y = this.rotation;
+        this.mesh.rotation.set(this.pitch || 0, this.rotation, this.roll || 0);
+        this.mesh.rotation.order = 'YXZ'; // Yaw first, then pitch, then roll
         
         // Animate wheels
         this.wheelRotation += this.speed * delta * 2;

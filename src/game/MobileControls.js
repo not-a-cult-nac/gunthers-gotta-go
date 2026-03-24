@@ -1,5 +1,5 @@
 /**
- * Mobile touch controls - virtual joystick + buttons
+ * Mobile touch controls - dual stick + buttons
  */
 
 export class MobileControls {
@@ -7,41 +7,37 @@ export class MobileControls {
         this.input = inputManager;
         this.enabled = false;
         
-        // Joystick state
-        this.joystick = {
+        // Left stick (movement)
+        this.leftStick = {
             active: false,
-            startX: 0,
-            startY: 0,
+            touchId: null,
+            centerX: 0,
+            centerY: 0,
             currentX: 0,
-            currentY: 0,
-            touchId: null
+            currentY: 0
         };
         
-        // Camera touch state
-        this.camera = {
+        // Right stick (camera/aim)
+        this.rightStick = {
             active: false,
-            lastX: 0,
-            lastY: 0,
-            touchId: null
+            touchId: null,
+            centerX: 0,
+            centerY: 0,
+            currentX: 0,
+            currentY: 0
         };
         
-        this.buttons = {};
         this.container = null;
+        this.stickRadius = 50;
         
         this.checkMobile();
     }
     
     checkMobile() {
-        // Enable on touch devices or small screens
         const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
         const isSmallScreen = window.innerWidth <= 1024;
         
-        if (isTouchDevice || isSmallScreen) {
-            this.enable();
-        }
-        
-        // Also enable if URL has ?mobile
-        if (window.location.search.includes('mobile')) {
+        if (isTouchDevice || isSmallScreen || window.location.search.includes('mobile')) {
             this.enable();
         }
     }
@@ -52,16 +48,9 @@ export class MobileControls {
         
         this.createUI();
         this.setupTouchListeners();
-        
-        // Hide desktop instructions
-        const instructions = document.getElementById('instructions');
-        if (instructions) {
-            instructions.textContent = 'Joystick: Move | Right side: Aim | Buttons: Actions';
-        }
     }
     
     createUI() {
-        // Container for all mobile controls
         this.container = document.createElement('div');
         this.container.id = 'mobile-controls';
         this.container.innerHTML = `
@@ -76,303 +65,301 @@ export class MobileControls {
                     z-index: 1000;
                     user-select: none;
                     -webkit-user-select: none;
+                    -webkit-touch-callout: none;
                 }
                 
-                #joystick-zone {
+                .stick-zone {
                     position: absolute;
-                    left: 0;
                     bottom: 0;
-                    width: 40%;
-                    height: 50%;
+                    width: 45%;
+                    height: 45%;
                     pointer-events: auto;
                 }
                 
-                #joystick-base {
+                #left-stick-zone {
+                    left: 0;
+                }
+                
+                #right-stick-zone {
+                    right: 0;
+                }
+                
+                .stick-base {
                     position: absolute;
                     width: 120px;
                     height: 120px;
-                    background: rgba(255,255,255,0.2);
-                    border: 3px solid rgba(255,255,255,0.4);
-                    border-radius: 50%;
-                    display: none;
-                }
-                
-                #joystick-stick {
-                    position: absolute;
-                    width: 50px;
-                    height: 50px;
-                    background: rgba(255,255,255,0.6);
+                    background: rgba(255,255,255,0.15);
+                    border: 3px solid rgba(255,255,255,0.3);
                     border-radius: 50%;
                     transform: translate(-50%, -50%);
                     display: none;
                 }
                 
-                #camera-zone {
+                .stick-thumb {
                     position: absolute;
-                    right: 0;
-                    top: 0;
-                    width: 60%;
-                    height: 70%;
-                    pointer-events: auto;
+                    width: 50px;
+                    height: 50px;
+                    background: rgba(255,255,255,0.5);
+                    border: 2px solid rgba(255,255,255,0.8);
+                    border-radius: 50%;
+                    transform: translate(-50%, -50%);
+                    display: none;
                 }
                 
+                /* Buttons */
                 .mobile-btn {
                     position: absolute;
-                    width: 70px;
-                    height: 70px;
-                    background: rgba(255,255,255,0.25);
-                    border: 3px solid rgba(255,255,255,0.5);
+                    background: rgba(255,255,255,0.2);
+                    border: 3px solid rgba(255,255,255,0.4);
                     border-radius: 50%;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    font-size: 24px;
+                    font-size: 20px;
                     font-weight: bold;
                     color: white;
                     text-shadow: 1px 1px 2px black;
                     pointer-events: auto;
-                    transition: background 0.1s;
                 }
                 
-                .mobile-btn:active, .mobile-btn.pressed {
+                .mobile-btn.pressed {
                     background: rgba(255,255,255,0.5);
+                    transform: scale(0.95);
                 }
                 
+                /* SHOOT - big red button, right side above stick */
                 #btn-shoot {
                     right: 20px;
-                    bottom: 120px;
-                    width: 90px;
-                    height: 90px;
-                    background: rgba(255,50,50,0.4);
+                    bottom: 50%;
+                    width: 75px;
+                    height: 75px;
+                    background: rgba(255,60,60,0.5);
                     border-color: rgba(255,100,100,0.7);
                     font-size: 16px;
+                    font-weight: bold;
                 }
                 
-                #btn-enter {
-                    right: 120px;
-                    bottom: 60px;
-                    background: rgba(50,150,255,0.4);
+                /* Vehicle enter/exit - left of shoot */
+                #btn-vehicle {
+                    right: 105px;
+                    bottom: 53%;
+                    width: 55px;
+                    height: 55px;
+                    background: rgba(60,150,255,0.5);
                     border-color: rgba(100,180,255,0.7);
+                    font-size: 22px;
                 }
                 
+                /* Grab/Throw - below vehicle button */
                 #btn-grab {
-                    right: 120px;
-                    bottom: 150px;
-                    background: rgba(255,200,50,0.4);
+                    right: 105px;
+                    bottom: 38%;
+                    width: 55px;
+                    height: 55px;
+                    background: rgba(255,200,60,0.5);
                     border-color: rgba(255,220,100,0.7);
+                    font-size: 11px;
                 }
                 
+                /* Boost - below shoot */
                 #btn-boost {
                     right: 20px;
-                    bottom: 20px;
-                    background: rgba(50,255,100,0.4);
+                    bottom: 36%;
+                    width: 55px;
+                    height: 55px;
+                    background: rgba(60,255,120,0.5);
                     border-color: rgba(100,255,150,0.7);
-                    font-size: 14px;
+                    font-size: 20px;
                 }
                 
-                #btn-camera {
-                    right: 200px;
-                    bottom: 100px;
-                    width: 50px;
-                    height: 50px;
-                    font-size: 18px;
-                    background: rgba(150,150,150,0.3);
+                /* Instructions */
+                #mobile-instructions {
+                    position: absolute;
+                    bottom: 5px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    color: rgba(255,255,255,0.6);
+                    font-size: 11px;
+                    text-align: center;
+                    pointer-events: none;
                 }
             </style>
             
-            <div id="joystick-zone">
-                <div id="joystick-base"></div>
-                <div id="joystick-stick"></div>
+            <!-- Left stick zone (movement) -->
+            <div id="left-stick-zone" class="stick-zone">
+                <div id="left-stick-base" class="stick-base"></div>
+                <div id="left-stick-thumb" class="stick-thumb"></div>
             </div>
             
-            <div id="camera-zone"></div>
+            <!-- Right stick zone (camera) -->
+            <div id="right-stick-zone" class="stick-zone">
+                <div id="right-stick-base" class="stick-base"></div>
+                <div id="right-stick-thumb" class="stick-thumb"></div>
+            </div>
             
-            <div id="btn-shoot" class="mobile-btn">🔫</div>
-            <div id="btn-enter" class="mobile-btn">E</div>
-            <div id="btn-grab" class="mobile-btn">✋</div>
-            <div id="btn-boost" class="mobile-btn">BOOST</div>
-            <div id="btn-camera" class="mobile-btn">📷</div>
+            <!-- Action buttons -->
+            <div id="btn-shoot" class="mobile-btn">FIRE</div>
+            <div id="btn-vehicle" class="mobile-btn">E</div>
+            <div id="btn-grab" class="mobile-btn">GRAB</div>
+            <div id="btn-boost" class="mobile-btn">⚡</div>
+            
+            <div id="mobile-instructions">
+                Left stick: Move | Right stick: Aim
+            </div>
         `;
         
         document.body.appendChild(this.container);
         
-        // Cache button references
-        this.buttons = {
-            shoot: document.getElementById('btn-shoot'),
-            enter: document.getElementById('btn-enter'),
-            grab: document.getElementById('btn-grab'),
-            boost: document.getElementById('btn-boost'),
-            camera: document.getElementById('btn-camera')
-        };
+        // Cache elements
+        this.leftZone = document.getElementById('left-stick-zone');
+        this.leftBase = document.getElementById('left-stick-base');
+        this.leftThumb = document.getElementById('left-stick-thumb');
         
-        this.joystickZone = document.getElementById('joystick-zone');
-        this.joystickBase = document.getElementById('joystick-base');
-        this.joystickStick = document.getElementById('joystick-stick');
-        this.cameraZone = document.getElementById('camera-zone');
+        this.rightZone = document.getElementById('right-stick-zone');
+        this.rightBase = document.getElementById('right-stick-base');
+        this.rightThumb = document.getElementById('right-stick-thumb');
+        
+        // Hide desktop instructions
+        const instructions = document.getElementById('instructions');
+        if (instructions) instructions.style.display = 'none';
     }
     
     setupTouchListeners() {
-        // Joystick
-        this.joystickZone.addEventListener('touchstart', (e) => this.onJoystickStart(e), { passive: false });
-        this.joystickZone.addEventListener('touchmove', (e) => this.onJoystickMove(e), { passive: false });
-        this.joystickZone.addEventListener('touchend', (e) => this.onJoystickEnd(e), { passive: false });
+        // Left stick
+        this.leftZone.addEventListener('touchstart', (e) => this.onStickStart(e, 'left'), { passive: false });
+        this.leftZone.addEventListener('touchmove', (e) => this.onStickMove(e, 'left'), { passive: false });
+        this.leftZone.addEventListener('touchend', (e) => this.onStickEnd(e, 'left'), { passive: false });
+        this.leftZone.addEventListener('touchcancel', (e) => this.onStickEnd(e, 'left'), { passive: false });
         
-        // Camera
-        this.cameraZone.addEventListener('touchstart', (e) => this.onCameraStart(e), { passive: false });
-        this.cameraZone.addEventListener('touchmove', (e) => this.onCameraMove(e), { passive: false });
-        this.cameraZone.addEventListener('touchend', (e) => this.onCameraEnd(e), { passive: false });
+        // Right stick
+        this.rightZone.addEventListener('touchstart', (e) => this.onStickStart(e, 'right'), { passive: false });
+        this.rightZone.addEventListener('touchmove', (e) => this.onStickMove(e, 'right'), { passive: false });
+        this.rightZone.addEventListener('touchend', (e) => this.onStickEnd(e, 'right'), { passive: false });
+        this.rightZone.addEventListener('touchcancel', (e) => this.onStickEnd(e, 'right'), { passive: false });
         
         // Buttons
-        this.setupButton('shoot', 'shoot');
-        this.setupButton('enter', 'interact');
-        this.setupButton('grab', 'grab');
-        this.setupButton('boost', 'boost');
-        
-        // Camera toggle is special - single tap
-        this.buttons.camera.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.buttons.camera.classList.add('pressed');
-            this.input.keys.toggleCamera = true;
-        });
-        this.buttons.camera.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            this.buttons.camera.classList.remove('pressed');
-            this.input.keys.toggleCamera = false;
-        });
+        this.setupButton('btn-shoot', 'shoot');
+        this.setupButton('btn-vehicle', 'interact');
+        this.setupButton('btn-grab', 'grab');
+        this.setupButton('btn-boost', 'boost');
     }
     
-    setupButton(btnName, inputKey) {
-        const btn = this.buttons[btnName];
+    setupButton(id, inputKey) {
+        const btn = document.getElementById(id);
         
         btn.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             btn.classList.add('pressed');
             this.input.keys[inputKey] = true;
-        });
+        }, { passive: false });
         
         btn.addEventListener('touchend', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             btn.classList.remove('pressed');
             this.input.keys[inputKey] = false;
-        });
+        }, { passive: false });
         
         btn.addEventListener('touchcancel', (e) => {
             btn.classList.remove('pressed');
             this.input.keys[inputKey] = false;
-        });
+        }, { passive: false });
     }
     
-    onJoystickStart(e) {
+    onStickStart(e, side) {
         e.preventDefault();
         const touch = e.changedTouches[0];
+        const stick = side === 'left' ? this.leftStick : this.rightStick;
+        const base = side === 'left' ? this.leftBase : this.rightBase;
+        const thumb = side === 'left' ? this.leftThumb : this.rightThumb;
         
-        this.joystick.active = true;
-        this.joystick.touchId = touch.identifier;
-        this.joystick.startX = touch.clientX;
-        this.joystick.startY = touch.clientY;
-        this.joystick.currentX = touch.clientX;
-        this.joystick.currentY = touch.clientY;
+        if (stick.active) return; // Already tracking a touch
         
-        // Show joystick at touch position
-        this.joystickBase.style.display = 'block';
-        this.joystickStick.style.display = 'block';
-        this.joystickBase.style.left = (touch.clientX - 60) + 'px';
-        this.joystickBase.style.top = (touch.clientY - 60) + 'px';
-        this.joystickStick.style.left = touch.clientX + 'px';
-        this.joystickStick.style.top = touch.clientY + 'px';
+        stick.active = true;
+        stick.touchId = touch.identifier;
+        stick.centerX = touch.clientX;
+        stick.centerY = touch.clientY;
+        stick.currentX = touch.clientX;
+        stick.currentY = touch.clientY;
+        
+        // Show stick at touch position
+        base.style.display = 'block';
+        base.style.left = touch.clientX + 'px';
+        base.style.top = touch.clientY + 'px';
+        
+        thumb.style.display = 'block';
+        thumb.style.left = touch.clientX + 'px';
+        thumb.style.top = touch.clientY + 'px';
     }
     
-    onJoystickMove(e) {
+    onStickMove(e, side) {
         e.preventDefault();
-        if (!this.joystick.active) return;
+        const stick = side === 'left' ? this.leftStick : this.rightStick;
+        const thumb = side === 'left' ? this.leftThumb : this.rightThumb;
+        
+        if (!stick.active) return;
         
         for (const touch of e.changedTouches) {
-            if (touch.identifier === this.joystick.touchId) {
-                this.joystick.currentX = touch.clientX;
-                this.joystick.currentY = touch.clientY;
-                
-                // Calculate joystick offset (clamped to radius)
-                const maxRadius = 50;
-                let dx = touch.clientX - this.joystick.startX;
-                let dy = touch.clientY - this.joystick.startY;
+            if (touch.identifier === stick.touchId) {
+                let dx = touch.clientX - stick.centerX;
+                let dy = touch.clientY - stick.centerY;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 
-                if (dist > maxRadius) {
-                    dx = (dx / dist) * maxRadius;
-                    dy = (dy / dist) * maxRadius;
+                // Clamp to radius
+                if (dist > this.stickRadius) {
+                    dx = (dx / dist) * this.stickRadius;
+                    dy = (dy / dist) * this.stickRadius;
                 }
                 
-                // Update stick position
-                this.joystickStick.style.left = (this.joystick.startX + dx) + 'px';
-                this.joystickStick.style.top = (this.joystick.startY + dy) + 'px';
+                stick.currentX = stick.centerX + dx;
+                stick.currentY = stick.centerY + dy;
                 
-                // Update input (normalize to -1 to 1)
-                const normX = dx / maxRadius;
-                const normY = dy / maxRadius;
+                // Update thumb position
+                thumb.style.left = stick.currentX + 'px';
+                thumb.style.top = stick.currentY + 'px';
                 
-                this.input.keys.forward = normY < -0.3;
-                this.input.keys.backward = normY > 0.3;
-                this.input.keys.left = normX < -0.3;
-                this.input.keys.right = normX > 0.3;
+                // Normalize to -1 to 1
+                const normX = dx / this.stickRadius;
+                const normY = dy / this.stickRadius;
+                
+                if (side === 'left') {
+                    // Movement
+                    this.input.keys.forward = normY < -0.2;
+                    this.input.keys.backward = normY > 0.2;
+                    this.input.keys.left = normX < -0.2;
+                    this.input.keys.right = normX > 0.2;
+                } else {
+                    // Camera - feed as mouse delta
+                    this.input.mouse.deltaX += dx * 0.15;
+                    this.input.mouse.deltaY += dy * 0.15;
+                }
             }
         }
     }
     
-    onJoystickEnd(e) {
+    onStickEnd(e, side) {
         e.preventDefault();
-        for (const touch of e.changedTouches) {
-            if (touch.identifier === this.joystick.touchId) {
-                this.joystick.active = false;
-                this.joystick.touchId = null;
-                
-                // Hide joystick
-                this.joystickBase.style.display = 'none';
-                this.joystickStick.style.display = 'none';
-                
-                // Reset input
-                this.input.keys.forward = false;
-                this.input.keys.backward = false;
-                this.input.keys.left = false;
-                this.input.keys.right = false;
-            }
-        }
-    }
-    
-    onCameraStart(e) {
-        e.preventDefault();
-        const touch = e.changedTouches[0];
-        
-        this.camera.active = true;
-        this.camera.touchId = touch.identifier;
-        this.camera.lastX = touch.clientX;
-        this.camera.lastY = touch.clientY;
-    }
-    
-    onCameraMove(e) {
-        e.preventDefault();
-        if (!this.camera.active) return;
+        const stick = side === 'left' ? this.leftStick : this.rightStick;
+        const base = side === 'left' ? this.leftBase : this.rightBase;
+        const thumb = side === 'left' ? this.leftThumb : this.rightThumb;
         
         for (const touch of e.changedTouches) {
-            if (touch.identifier === this.camera.touchId) {
-                const dx = touch.clientX - this.camera.lastX;
-                const dy = touch.clientY - this.camera.lastY;
+            if (touch.identifier === stick.touchId) {
+                stick.active = false;
+                stick.touchId = null;
                 
-                // Feed into input manager as mouse movement
-                this.input.mouse.deltaX += dx * 0.5;
-                this.input.mouse.deltaY += dy * 0.5;
+                // Hide stick
+                base.style.display = 'none';
+                thumb.style.display = 'none';
                 
-                this.camera.lastX = touch.clientX;
-                this.camera.lastY = touch.clientY;
-            }
-        }
-    }
-    
-    onCameraEnd(e) {
-        e.preventDefault();
-        for (const touch of e.changedTouches) {
-            if (touch.identifier === this.camera.touchId) {
-                this.camera.active = false;
-                this.camera.touchId = null;
+                if (side === 'left') {
+                    // Reset movement
+                    this.input.keys.forward = false;
+                    this.input.keys.backward = false;
+                    this.input.keys.left = false;
+                    this.input.keys.right = false;
+                }
             }
         }
     }

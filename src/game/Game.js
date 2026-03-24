@@ -161,7 +161,20 @@ export class Game {
         if (this.gameState === 'playing') {
             this.player.update(delta, input, this.vehicle, this.world);
             this.vehicle.update(delta, input, this.player, this.world);
-            this.gunther.update(delta, this.vehicle, this.player, this.enemyManager.enemies, this.world);
+            
+            // Handle Gunther flying (thrown)
+            if (this.gunther.isFlying) {
+                const flyResult = this.gunther.updateFlying(delta, this.world, this.vehicle);
+                
+                // Check if Gunther crossed goal while flying!
+                if (this.gunther.position.z >= GameConfig.GOAL_Z) {
+                    this.win('Gunther YEEETED to victory!');
+                    return;
+                }
+            } else {
+                this.gunther.update(delta, this.vehicle, this.player, this.enemyManager.enemies, this.world);
+            }
+            
             this.enemyManager.update(delta, this.vehicle, this.gunther, this.player, this.world);
             
             // Handle Gunther interactions
@@ -231,31 +244,30 @@ export class Game {
     
     throwGunther() {
         // Throw Gunther in direction player is facing
-        const throwDistance = 8;
+        const throwDistance = 15; // Good throwing distance
         const throwDir = new THREE.Vector3(
             Math.sin(this.player.rotation.y),
             0,
             Math.cos(this.player.rotation.y)
         ).normalize();
         
-        const landingPos = this.player.position.clone().add(throwDir.multiplyScalar(throwDistance));
-        landingPos.y = this.world.getHeightAt(landingPos.x, landingPos.z);
-        
-        // Check if landing near the jeep - if so, put him in!
-        const distToJeep = landingPos.distanceTo(this.vehicle.position);
-        if (distToJeep < 5) {
-            this.gunther.putInVehicle();
-            this.gunther.speak("Back in ze car! Danke!");
-        } else {
-            this.gunther.throwTo(landingPos);
-            this.gunther.speak("WHEEEEE!");
-        }
-        
+        this.gunther.throwTo(this.player.position, throwDir, throwDistance);
+        this.gunther.speak("WHEEEEE!");
         this.player.carryingGunther = false;
     }
     
     checkGameState() {
-        // Win: Gunther reaches goal
+        // Win: Gunther reaches goal (in vehicle, thrown, or walking)
+        if (this.gunther.position.z >= GameConfig.GOAL_Z && !this.gunther.isDead) {
+            if (this.gunther.state === 'in_vehicle') {
+                this.win('Gunther delivered safely!');
+            } else {
+                this.win('Gunther crossed the finish line!');
+            }
+            return;
+        }
+        
+        // Also win if vehicle with Gunther crosses
         if (this.vehicle.position.z >= GameConfig.GOAL_Z && this.gunther.state === 'in_vehicle') {
             this.win('Gunther delivered safely!');
             return;

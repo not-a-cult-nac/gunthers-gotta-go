@@ -33,6 +33,14 @@ export class Gunther {
         
         // Animation
         this.bobOffset = 0;
+        
+        // Throw physics
+        this.isFlying = false;
+        this.flyVelocity = new THREE.Vector3();
+        this.flyStartPos = new THREE.Vector3();
+        this.flyTargetPos = new THREE.Vector3();
+        this.flyTime = 0;
+        this.flyDuration = 0;
     }
     
     init(vehicle) {
@@ -271,11 +279,77 @@ export class Gunther {
         }
     }
     
-    throwTo(targetPos) {
-        // Land at target position and start wandering
-        this.state = 'wandering';
-        this.position.copy(targetPos);
+    throwTo(startPos, direction, distance) {
+        // Start flying through the air!
+        this.state = 'flying';
+        this.isFlying = true;
         this.mesh.visible = true;
+        
+        this.flyStartPos.copy(startPos);
+        this.flyStartPos.y += 1.5; // Start at carrying height
+        this.position.copy(this.flyStartPos);
+        
+        // Calculate target position
+        this.flyTargetPos.copy(startPos);
+        this.flyTargetPos.x += direction.x * distance;
+        this.flyTargetPos.z += direction.z * distance;
+        
+        this.flyTime = 0;
+        this.flyDuration = 0.8; // seconds in air
+        
+        // Initial velocity for arc
+        this.flyVelocity.set(
+            direction.x * distance / this.flyDuration,
+            8, // upward velocity for arc
+            direction.z * distance / this.flyDuration
+        );
+    }
+    
+    updateFlying(delta, world, vehicle) {
+        if (!this.isFlying) return false;
+        
+        this.flyTime += delta;
+        
+        // Apply gravity
+        this.flyVelocity.y -= 20 * delta;
+        
+        // Update position
+        this.position.x += this.flyVelocity.x * delta;
+        this.position.y += this.flyVelocity.y * delta;
+        this.position.z += this.flyVelocity.z * delta;
+        
+        // Spin while flying!
+        if (this.mesh) {
+            this.mesh.rotation.x += delta * 8;
+            this.mesh.rotation.z += delta * 5;
+        }
+        
+        // Check ground collision
+        const groundY = world.getHeightAt(this.position.x, this.position.z);
+        if (this.position.y <= groundY + 0.5) {
+            // Landed!
+            this.position.y = groundY;
+            this.isFlying = false;
+            
+            // Reset rotation
+            if (this.mesh) {
+                this.mesh.rotation.x = 0;
+                this.mesh.rotation.z = 0;
+            }
+            
+            // Check if landed in/on jeep
+            const distToJeep = this.position.distanceTo(vehicle.position);
+            if (distToJeep < 4) {
+                this.putInVehicle();
+                this.speak("Back in ze car! Danke!");
+                return 'in_vehicle';
+            }
+            
+            this.state = 'wandering';
+            return 'landed';
+        }
+        
+        return 'flying';
     }
     
     putInVehicle() {

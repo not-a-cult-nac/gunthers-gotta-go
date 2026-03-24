@@ -61,13 +61,21 @@ export class Game {
             1000
         );
         
-        // Renderer
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        // Check if mobile
+        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.location.search.includes('mobile');
+        
+        // Renderer - reduce quality on mobile for performance
+        this.renderer = new THREE.WebGLRenderer({ 
+            antialias: !isMobile, // Disable AA on mobile
+            powerPreference: 'high-performance'
+        });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
         document.body.appendChild(this.renderer.domElement);
+        
+        console.log('Renderer created, canvas:', this.renderer.domElement.width, 'x', this.renderer.domElement.height);
         
         // Physics world
         const gravity = { x: 0.0, y: -9.81, z: 0.0 };

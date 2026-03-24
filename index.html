@@ -2,16 +2,30 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>Gunther's Gotta Go - SPP</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
+        html, body { 
             overflow: hidden; 
             font-family: 'Courier New', monospace;
             background: #1a1a2e;
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        canvas { display: block; }
+        canvas { 
+            display: block; 
+            width: 100% !important;
+            height: 100% !important;
+            touch-action: none;
+        }
         
         #ui {
             position: absolute;
@@ -195,7 +209,9 @@
         <p>Escort the world's most suicidal child to safety!</p>
         <p>Drive the jeep. Shoot enemies. Don't let Gunther die.</p>
         <p style="color: #ff6b35;">⚠️ He WANTS to run into danger.</p>
-        <button id="start-btn">CLICK TO START</button>
+        <button id="start-btn">TAP TO START</button>
+        <p id="loading-msg" style="display: none; color: #ff6b35; margin-top: 20px;">Loading physics engine...</p>
+        <p id="error-msg" style="display: none; color: #ff4444; margin-top: 20px;">Error loading game. See console.</p>
     </div>
     
     <div id="end-screen">

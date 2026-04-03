@@ -3,3 +3,5 @@ Player connected: MlAGmhjYCCdGBgl5AAAB
 {"ts":"2026-03-09T20:57:34.096Z","level":"info","msg":"Container started","data":{"name":"ggg (mike)"}}
 {"ts":"2026-03-22T18:02:13.032Z","level":"info","msg":"Container started","data":{"name":"ggg (aaron2)"}}
 {"ts":"2026-03-23T00:59:06.885Z","level":"info","msg":"Container started","data":{"name":"ggg (spp)"}}
+{"ts":"2026-04-03T22:54:01.751Z","level":"error","msg":"Container start failed","data":{"name":"ggg (spp)","error":"Docker compose failed (exit 1)"}}
+{"ts":"2026-04-03T23:05:03.693Z","level":"info","msg":"Container stopped","data":{"name":"ggg (spp)"}}

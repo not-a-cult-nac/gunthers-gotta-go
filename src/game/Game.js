@@ -233,10 +233,29 @@ export class Game {
             this._chargingSpoke = false;
         }
 
-        // iPad dead = game over
-        if (this.iPadCharge <= 0) {
+        // iPad dead = Gunther exits the jeep
+        if (this.iPadCharge <= 0 && this.gunther.state === 'in_vehicle') {
             this.gunther.speak(GameConfig.QUOTES.iPadDead[0]);
-            this.lose(GameConfig.QUOTES.death.ipad);
+            this.gunther.exitVehicle();
+        }
+
+        // If Gunther is wandering and iPad has recharged enough, and jeep is close + stopped, he gets back in
+        if (this.gunther.state === 'wandering') {
+            const chargePct = (this.iPadCharge / GameConfig.IPAD_MAX_CHARGE) * 100;
+            const dist = this.gunther.distanceToVehicle();
+            const stopped = Math.abs(this.vehicle.speed) <= GameConfig.IPAD_CHARGE_SPEED_THRESHOLD;
+
+            if (chargePct >= GameConfig.GUNTHER_REBOARD_CHARGE && dist <= GameConfig.GUNTHER_REBOARD_DISTANCE && stopped) {
+                this.gunther.putInVehicle();
+                const reboardQuotes = GameConfig.QUOTES.iPadReboard;
+                this.gunther.speak(reboardQuotes[Math.floor(Math.random() * reboardQuotes.length)]);
+            }
+
+            // If Gunther wanders too far, game over
+            if (dist > GameConfig.GUNTHER_WANDER_MAX_DISTANCE) {
+                this.gunther.die('wandered', 'Gunther wandered off!');
+                this.lose('Gunther wandered off!');
+            }
         }
     }
 

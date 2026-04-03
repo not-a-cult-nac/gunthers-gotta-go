@@ -1,12 +1,12 @@
 /**
- * Gunther - Robot German Boy
+ * Gunther - Robot German Boy with iPad
  */
 
 import * as THREE from 'three';
 
 export function createGuntherModel() {
     const gunther = new THREE.Group();
-    
+
     // Metal torso with lederhosen-style plating
     const torso = new THREE.Mesh(
         new THREE.BoxGeometry(0.5, 0.6, 0.3),
@@ -15,7 +15,7 @@ export function createGuntherModel() {
     torso.position.y = 0.8;
     torso.castShadow = true;
     gunther.add(torso);
-    
+
     // Lederhosen suspender straps (brass)
     const strapMat = new THREE.MeshStandardMaterial({ color: 0xcc9944, metalness: 0.6 });
     const strapL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.05), strapMat);
@@ -24,14 +24,14 @@ export function createGuntherModel() {
     const strapR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.05), strapMat);
     strapR.position.set(0.15, 0.85, 0.16);
     gunther.add(strapR);
-    
+
     // Robot head - boxy
     const headMat = new THREE.MeshStandardMaterial({ color: 0xaabbcc, metalness: 0.7, roughness: 0.4 });
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.4, 0.35), headMat);
     head.position.y = 1.35;
     head.castShadow = true;
     gunther.add(head);
-    
+
     // Glowing LED eyes (blue)
     const eyeMat = new THREE.MeshStandardMaterial({ color: 0x00aaff, emissive: 0x00aaff, emissiveIntensity: 0.8 });
     const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06), eyeMat);
@@ -40,7 +40,7 @@ export function createGuntherModel() {
     const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.06), eyeMat);
     eyeR.position.set(0.1, 1.38, 0.17);
     gunther.add(eyeR);
-    
+
     // Antenna on head
     const antenna = new THREE.Mesh(
         new THREE.CylinderGeometry(0.02, 0.02, 0.25),
@@ -54,7 +54,7 @@ export function createGuntherModel() {
     );
     antennaTip.position.set(0, 1.85, 0);
     gunther.add(antennaTip);
-    
+
     // Blonde "hair" plate on top (German boy!)
     const hairPlate = new THREE.Mesh(
         new THREE.BoxGeometry(0.4, 0.08, 0.3),
@@ -62,7 +62,7 @@ export function createGuntherModel() {
     );
     hairPlate.position.set(0, 1.58, 0);
     gunther.add(hairPlate);
-    
+
     // Little robot legs
     const legMat = new THREE.MeshStandardMaterial({ color: 0x666677, metalness: 0.7 });
     const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.5), legMat);
@@ -71,17 +71,45 @@ export function createGuntherModel() {
     const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.5), legMat);
     legR.position.set(0.15, 0.3, 0);
     gunther.add(legR);
-    
-    // Robot arms
+
+    // Robot arms - angled to hold iPad
     const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.4), legMat);
-    armL.position.set(-0.35, 0.75, 0);
-    armL.rotation.z = 0.3;
+    armL.position.set(-0.28, 0.7, 0.15);
+    armL.rotation.z = 0.5;
+    armL.rotation.x = -0.3;
     gunther.add(armL);
     const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.4), legMat);
-    armR.position.set(0.35, 0.75, 0);
-    armR.rotation.z = -0.3;
+    armR.position.set(0.28, 0.7, 0.15);
+    armR.rotation.z = -0.5;
+    armR.rotation.x = -0.3;
     gunther.add(armR);
-    
+
+    // iPad in hands - glowing rectangle
+    const iPadMat = new THREE.MeshStandardMaterial({
+        color: 0x222222,
+        metalness: 0.9,
+        roughness: 0.2
+    });
+    const iPad = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.02), iPadMat);
+    iPad.position.set(0, 0.6, 0.25);
+    iPad.rotation.x = -0.4; // tilted toward face
+    iPad.name = 'iPad';
+    gunther.add(iPad);
+
+    // iPad screen glow
+    const screenMat = new THREE.MeshStandardMaterial({
+        color: 0x4488ff,
+        emissive: 0x4488ff,
+        emissiveIntensity: 0.8,
+        transparent: true,
+        opacity: 0.9
+    });
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), screenMat);
+    screen.position.set(0, 0.6, 0.262);
+    screen.rotation.x = -0.4;
+    screen.name = 'iPadScreen';
+    gunther.add(screen);
+
     // Hover marker above (green arrow pointing down)
     const marker = new THREE.Mesh(
         new THREE.ConeGeometry(0.25, 0.5, 4),
@@ -91,6 +119,6 @@ export function createGuntherModel() {
     marker.rotation.x = Math.PI;
     marker.name = 'marker';
     gunther.add(marker);
-    
+
     return gunther;
 }

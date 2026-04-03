@@ -79,8 +79,14 @@ export class Vehicle {
             this.speed *= 0.95;
         } else {
             const accel = GameConfig.VEHICLE_ACCELERATION;
-            const maxSpeed = GameConfig.VEHICLE_MAX_SPEED * (this.isBoosting ? GameConfig.VEHICLE_BOOST_MULTIPLIER : 1);
-            
+            let maxSpeed = GameConfig.VEHICLE_MAX_SPEED * (this.isBoosting ? GameConfig.VEHICLE_BOOST_MULTIPLIER : 1);
+
+            // Rugged terrain slows vehicle further
+            if (world && world.isInRuggedTerrain(this.position.x, this.position.z)) {
+                maxSpeed *= 0.5;
+                this.speed *= 0.97; // extra friction
+            }
+
             if (input.forward) {
                 this.speed = Math.min(this.speed + accel * delta, maxSpeed);
             } else if (input.backward) {

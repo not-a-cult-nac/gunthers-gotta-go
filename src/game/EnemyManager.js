@@ -1,5 +1,5 @@
 /**
- * Spawns and manages enemies
+ * Spawns and manages enemies - background scenery only (no chasing)
  */
 
 import * as THREE from 'three';
@@ -15,80 +15,66 @@ class Enemy {
         this.health = GameConfig.ENEMY_HEALTH;
         this.hasGunther = false;
         this.isDead = false;
-        
-        const baseSpeed = GameConfig.ENEMY_BASE_SPEED;
-        this.speed = type === 'killer' 
-            ? baseSpeed * 1.45 
-            : baseSpeed * 1.2;
-        this.speed *= 0.9 + Math.random() * 0.2;
-        
+
+        this.speed = GameConfig.ENEMY_BASE_SPEED * (0.5 + Math.random() * 0.5);
+
         this.mesh = createEnemyModel(type);
         this.mesh.position.copy(this.position);
         this.scene.add(this.mesh);
+
+        // Random wander target
+        this.wanderTarget = this.pickWanderTarget();
+        this.wanderTimer = 3 + Math.random() * 5;
     }
-    
-    update(delta, target, world) {
+
+    pickWanderTarget() {
+        return new THREE.Vector3(
+            this.position.x + (Math.random() - 0.5) * 30,
+            0,
+            this.position.z + (Math.random() - 0.5) * 30
+        );
+    }
+
+    update(delta, world) {
         if (this.isDead) return;
-        
-        // Move toward target
-        const dir = target.clone().sub(this.position);
+
+        // Wander aimlessly
+        this.wanderTimer -= delta;
+        if (this.wanderTimer <= 0) {
+            this.wanderTarget = this.pickWanderTarget();
+            this.wanderTimer = 3 + Math.random() * 5;
+        }
+
+        const dir = this.wanderTarget.clone().sub(this.position);
         dir.y = 0;
         const dist = dir.length();
-        
-        if (dist > 1) {
+
+        if (dist > 2) {
             dir.normalize();
             this.velocity.copy(dir.multiplyScalar(this.speed));
             this.position.add(this.velocity.clone().multiplyScalar(delta));
+        } else {
+            this.wanderTarget = this.pickWanderTarget();
         }
-        
+
         // Get terrain height
         if (world) {
             this.position.y = world.getHeightAt(this.position.x, this.position.z);
         }
-        
+
         // Face movement direction
         if (this.velocity.length() > 0.1) {
             this.mesh.rotation.y = Math.atan2(this.velocity.x, this.velocity.z);
         }
-        
-        // Update mesh
+
         this.mesh.position.copy(this.position);
     }
-    
-    takeDamage(amount) {
-        this.health -= amount;
-        
-        // Flash white
-        this.mesh.traverse(child => {
-            if (child.isMesh) {
-                child.material.emissive = new THREE.Color(0xffffff);
-                child.material.emissiveIntensity = 1.0;
-            }
-        });
-        
-        setTimeout(() => {
-            if (this.mesh) {
-                this.mesh.traverse(child => {
-                    if (child.isMesh) {
-                        child.material.emissiveIntensity = 0;
-                    }
-                });
-            }
-        }, 100);
-        
-        if (this.health <= 0) {
-            this.die();
-        }
-    }
-    
+
     die() {
         this.isDead = true;
-        this.hasGunther = false;
-        
-        // Death animation - scale down and remove
         const mesh = this.mesh;
         const scene = this.scene;
-        
+
         let scale = 1;
         const shrink = () => {
             scale -= 0.1;
@@ -113,15 +99,15 @@ export class EnemyManager {
         this.physicsWorld = physicsWorld;
         this.RAPIER = RAPIER;
         this.audioManager = audioManager;
-        
+
         this.enemies = [];
         this.spawnTimer = 0;
     }
-    
+
     init() {
-        // Enemies spawn when vehicle starts moving
+        // Enemies spawn as scenery
     }
-    
+
     update(delta, vehicle, gunther, player, world) {
         // Spawn new enemies
         this.spawnTimer += delta;
@@ -131,131 +117,48 @@ export class EnemyManager {
                 this.spawnEnemy(vehicle);
             }
         }
-        
+
         // Spawn initial enemies
         if (this.enemies.length === 0 && vehicle.position.z > GameConfig.START_Z + 10) {
             for (let i = 0; i < GameConfig.ENEMY_INITIAL_COUNT; i++) {
                 this.spawnEnemy(vehicle);
             }
         }
-        
-        // Update each enemy
+
+        // Update each enemy - just wander, no interactions
         for (const enemy of this.enemies) {
             if (enemy.isDead) continue;
-            
-            // Determine target
-            let target;
-            if (enemy.type === 'killer') {
-                target = vehicle.position.clone();
-            } else {
-                if (gunther.state === 'in_vehicle') {
-                    target = vehicle.position.clone();
-                } else {
-                    target = gunther.position.clone();
+            enemy.update(delta, world);
+
+            // Run over by vehicle (still works - satisfying!)
+            const distToVehicle = enemy.position.distanceTo(vehicle.position);
+            if (distToVehicle < 3 && Math.abs(vehicle.speed) > 5) {
+                enemy.die();
+                if (this.audioManager) {
+                    this.audioManager.playHit();
                 }
             }
-            
-            enemy.update(delta, target, world);
-            
-            this.checkEnemyInteractions(enemy, vehicle, gunther, player);
         }
-        
-        // Check bullet collisions
-        this.checkBulletCollisions(player);
-        
+
         // Remove dead enemies
         this.enemies = this.enemies.filter(e => !e.isDead);
     }
-    
+
     spawnEnemy(vehicle) {
         const minZ = Math.max(GameConfig.START_Z + 30, vehicle.position.z + GameConfig.ENEMY_SPAWN_AHEAD_MIN);
         const maxZ = Math.min(GameConfig.GOAL_Z - 30, vehicle.position.z + GameConfig.ENEMY_SPAWN_AHEAD_MAX);
-        
+
         if (minZ >= maxZ) return;
-        
+
         const side = Math.random() > 0.5 ? 1 : -1;
         const position = new THREE.Vector3(
             side * (GameConfig.ENEMY_SPAWN_SIDE_MIN + Math.random() * (GameConfig.ENEMY_SPAWN_SIDE_MAX - GameConfig.ENEMY_SPAWN_SIDE_MIN)),
             0,
             minZ + Math.random() * (maxZ - minZ)
         );
-        
+
         const type = Math.random() < GameConfig.ENEMY_STEALER_RATIO ? 'stealer' : 'killer';
         const enemy = new Enemy(this.scene, type, position);
         this.enemies.push(enemy);
-    }
-    
-    checkEnemyInteractions(enemy, vehicle, gunther, player) {
-        // Check if vehicle runs over enemy
-        const distToVehicle = enemy.position.distanceTo(vehicle.position);
-        if (distToVehicle < 3 && Math.abs(vehicle.speed) > 5) {
-            // Vehicle is moving fast and close - run over!
-            enemy.takeDamage(100); // Instant kill
-            if (this.audioManager) {
-                this.audioManager.playHit();
-            }
-            return; // Enemy is dead, skip other checks
-        }
-        
-        // Killer damages vehicle (only if close and vehicle is slow)
-        if (enemy.type === 'killer') {
-            const dist = enemy.position.distanceTo(vehicle.position);
-            if (dist < 4 && Math.abs(vehicle.speed) < 5) {
-                vehicle.takeDamage(1);
-                // Push enemy back
-                const pushDir = enemy.position.clone().sub(vehicle.position).normalize();
-                enemy.position.add(pushDir.multiplyScalar(0.5));
-            }
-        }
-        
-        // Stealer grabs Gunther
-        if (enemy.type === 'stealer' && !enemy.hasGunther) {
-            if (gunther.state === 'wandering') {
-                const dist = enemy.position.distanceTo(gunther.position);
-                if (dist < 2) {
-                    gunther.getKidnapped(enemy);
-                }
-            }
-        }
-        
-        // Enemy with Gunther runs away
-        if (enemy.hasGunther) {
-            const awayDir = enemy.position.clone().sub(vehicle.position);
-            awayDir.y = 0;
-            awayDir.normalize();
-            enemy.position.add(awayDir.multiplyScalar(enemy.speed * 0.016));
-        }
-        
-        // Enemy damages player on foot
-        if (!player.inVehicle) {
-            const dist = enemy.position.distanceTo(player.position);
-            if (dist < 2) {
-                player.takeDamage(0.5);
-            }
-        }
-    }
-    
-    checkBulletCollisions(player) {
-        for (const bullet of player.bullets) {
-            for (const enemy of this.enemies) {
-                if (enemy.isDead) continue;
-                
-                // Check collision with enemy body (center mass at y+1)
-                const enemyCenter = enemy.position.clone();
-                enemyCenter.y += 1; // Enemy center is about 1m above ground
-                
-                const dist = bullet.position.distanceTo(enemyCenter);
-                if (dist < 2) { // Larger hitbox for easier hits
-                    enemy.takeDamage(bullet.userData.damage);
-                    bullet.userData.lifetime = 0;
-                    
-                    if (this.audioManager) {
-                        this.audioManager.playHit();
-                    }
-                    
-                    break;
-                }
-            }
-        }
     }
 }

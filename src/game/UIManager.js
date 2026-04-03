@@ -8,48 +8,31 @@ export class UIManager {
     constructor() {
         this.elements = {
             guntherStatus: document.getElementById('gunther-status'),
-            enemyCount: document.getElementById('enemy-count'),
             distance: document.getElementById('distance'),
             jeepHealth: document.getElementById('jeep-health-bar'),
-            playerHealth: document.getElementById('player-health-bar'),
+            iPadCharge: document.getElementById('ipad-charge-bar'),
             guntherSpeech: document.getElementById('gunther-speech'),
             endScreen: document.getElementById('end-screen'),
             endTitle: document.getElementById('end-title'),
             endText: document.getElementById('end-text'),
-            guntherIndicator: document.getElementById('gunther-indicator'),
-            guntherDist: document.getElementById('gunther-dist'),
         };
-        
+
         this.speechTimeout = null;
     }
-    
-    update(vehicle, gunther, player, enemyManager) {
+
+    update(vehicle, gunther, player, enemyManager, iPadCharge) {
         // Gunther status
-        const statusMap = {
-            'in_vehicle': 'IN CAR ✓',
-            'wandering': '⚠️ LOOSE!',
-            'trapped': '🪤 TRAPPED!',
-            'carried': '🙌 CARRYING',
-            'kidnapped': '❌ KIDNAPPED!',
-        };
-        this.elements.guntherStatus.textContent = statusMap[gunther.state] || gunther.state;
-        this.elements.guntherStatus.style.color = gunther.state === 'in_vehicle' ? '#0f0' : '#ff0';
-        
-        // Enemy count
-        this.elements.enemyCount.textContent = enemyManager.enemies.length;
-        
+        this.elements.guntherStatus.textContent = 'IN CAR';
+        this.elements.guntherStatus.style.color = '#0f0';
+
         // Distance to goal
         const remaining = Math.max(0, Math.round(GameConfig.GOAL_Z - vehicle.position.z));
         this.elements.distance.textContent = remaining;
-        
-        // Health bars
+
+        // Jeep health bar
         const jeepPercent = Math.max(0, (vehicle.health / GameConfig.VEHICLE_HEALTH) * 100);
-        const playerPercent = Math.max(0, (player.health / GameConfig.PLAYER_HEALTH) * 100);
-        
         this.elements.jeepHealth.style.width = `${jeepPercent}%`;
-        this.elements.playerHealth.style.width = `${playerPercent}%`;
-        
-        // Color health bars based on level
+
         if (jeepPercent < 33) {
             this.elements.jeepHealth.style.background = 'linear-gradient(90deg, #aa0000, #ff0000)';
         } else if (jeepPercent < 66) {
@@ -57,35 +40,35 @@ export class UIManager {
         } else {
             this.elements.jeepHealth.style.background = 'linear-gradient(90deg, #00aa00, #00ff00)';
         }
-        
-        // Gunther distance indicator (when not in vehicle)
-        if (gunther.state !== 'in_vehicle' && gunther.state !== 'carried' && this.elements.guntherIndicator) {
-            this.elements.guntherIndicator.style.display = 'block';
-            
-            const dist = Math.round(gunther.position.distanceTo(vehicle.position));
-            this.elements.guntherDist.textContent = `GUNTHER: ${dist}m`;
-            
-            // Color based on danger
-            const color = gunther.state === 'kidnapped' ? '#ff0000' : '#ffcc00';
-            this.elements.guntherIndicator.style.color = color;
-        } else if (this.elements.guntherIndicator) {
-            this.elements.guntherIndicator.style.display = 'none';
+
+        // iPad charge bar
+        if (iPadCharge !== undefined && this.elements.iPadCharge) {
+            const chargePct = Math.max(0, (iPadCharge / GameConfig.IPAD_MAX_CHARGE) * 100);
+            this.elements.iPadCharge.style.width = `${chargePct}%`;
+
+            if (chargePct < 25) {
+                this.elements.iPadCharge.style.background = 'linear-gradient(90deg, #aa0000, #ff0000)';
+            } else if (chargePct < 50) {
+                this.elements.iPadCharge.style.background = 'linear-gradient(90deg, #aaaa00, #ffff00)';
+            } else {
+                this.elements.iPadCharge.style.background = 'linear-gradient(90deg, #00aa00, #00ff00)';
+            }
         }
     }
-    
+
     showSpeech(text, duration = 3000) {
         if (this.speechTimeout) {
             clearTimeout(this.speechTimeout);
         }
-        
+
         this.elements.guntherSpeech.textContent = text;
         this.elements.guntherSpeech.style.opacity = '1';
-        
+
         this.speechTimeout = setTimeout(() => {
             this.elements.guntherSpeech.style.opacity = '0';
         }, duration);
     }
-    
+
     showEndScreen(win, reason) {
         this.elements.endScreen.style.display = 'flex';
         this.elements.endScreen.className = win ? 'win' : 'lose';

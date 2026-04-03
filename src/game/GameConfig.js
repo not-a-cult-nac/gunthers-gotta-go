@@ -1,10 +1,10 @@
 /**
- * Game configuration and constants
+ * Game configuration and constants - THE GAUNTLET
  */
 
 export const GameConfig = {
     // World bounds
-    GOAL_Z: 440,
+    GOAL_Z: 620,
     START_Z: -60,
     WORLD_WIDTH: 200,
 
@@ -12,7 +12,7 @@ export const GameConfig = {
     PLAYER_HEALTH: 100,
     PLAYER_SPEED: 8,
     PLAYER_SHOOT_DAMAGE: 25,
-    PLAYER_SHOOT_COOLDOWN: 0.15, // seconds
+    PLAYER_SHOOT_COOLDOWN: 0.15,
 
     // Vehicle (slowed down ~45% from original)
     VEHICLE_HEALTH: 150,
@@ -25,16 +25,16 @@ export const GameConfig = {
 
     // iPad charge
     IPAD_MAX_CHARGE: 100,
-    IPAD_DRAIN_RATE: 4.5, // per second while moving
-    IPAD_CHARGE_RATE: 17, // per second while stopped
-    IPAD_CHARGE_SPEED_THRESHOLD: 1.5, // speed below which jeep counts as "stopped"
+    IPAD_DRAIN_RATE: 4.5,
+    IPAD_CHARGE_RATE: 17,
+    IPAD_CHARGE_SPEED_THRESHOLD: 1.5,
 
     // Gunther
     GUNTHER_WANDER_SPEED: 2.0,
-    GUNTHER_WANDER_DIR_CHANGE: 1.5, // seconds between random direction changes
-    GUNTHER_WANDER_MAX_DISTANCE: 40, // distance from jeep before game over
-    GUNTHER_REBOARD_CHARGE: 10, // iPad charge % needed for Gunther to reboard
-    GUNTHER_REBOARD_DISTANCE: 8, // max distance from jeep to reboard
+    GUNTHER_WANDER_DIR_CHANGE: 1.5,
+    GUNTHER_WANDER_MAX_DISTANCE: 40,
+    GUNTHER_REBOARD_CHARGE: 10,
+    GUNTHER_REBOARD_DISTANCE: 8,
 
     // Enemies (background scenery only)
     ENEMY_SPAWN_INTERVAL: 5,
@@ -49,110 +49,100 @@ export const GameConfig = {
     ENEMY_SPAWN_SIDE_MAX: 45,
     ENEMY_DETECTION_RANGE: 50,
 
-    // Obstacles
-    OBSTACLES: [
-        // Bridges (narrow crossings)
-        { x: 0, z: 60, type: 'bridge', width: 5, length: 12, rotation: 0 },
-        { x: 0, z: 200, type: 'bridge', width: 5, length: 14, rotation: 0.2 },
-        { x: 0, z: 340, type: 'bridge', width: 5, length: 12, rotation: -0.15 },
+    // === THE GAUNTLET - Zone Definitions ===
+    ZONES: {
+        water:        { startZ: 0,   endZ: 60,  currentForce: 3 },
+        mud:          { startZ: 130, endZ: 180 },
+        tunnel:       { startZ: 200, endZ: 280 },
+        bridge:       { startZ: 360, endZ: 390, halfWidth: 3 },
+        ice:          { startZ: 450, endZ: 490 },
+        fallingRocks: { startZ: 500, endZ: 540, spawnInterval: 1.5 },
+    },
 
-        // === Opening gauntlet (z: 10-50) - tight boulder chicane ===
-        { x: 6, z: 12, type: 'boulder', radius: 3 },
-        { x: -6, z: 18, type: 'boulder', radius: 3 },
-        { x: 5, z: 25, type: 'boulder', radius: 2.5 },
-        { x: -5, z: 32, type: 'boulder', radius: 2.5 },
-        { x: 8, z: 30, type: 'boulder', radius: 3 },
-        { x: -5, z: 45, type: 'fallen_tree', length: 8, rotation: 0.8 },
-
-        // === First rugged zone with flanking boulders (z: 70-100) ===
-        { x: 0, z: 85, type: 'rugged', radius: 14 },
-        { x: -12, z: 75, type: 'boulder', radius: 2.5 },
-        { x: 14, z: 80, type: 'boulder', radius: 3 },
-        { x: -14, z: 90, type: 'boulder', radius: 2 },
-        { x: 6, z: 95, type: 'fallen_tree', length: 10, rotation: -0.5 },
-
-        // === S-curve section 1 (z: 105-135) - boulders force S-path ===
-        { x: -10, z: 105, type: 'boulder', radius: 4 },
-        { x: -4, z: 108, type: 'boulder', radius: 3 },
-        { x: 15, z: 110, type: 'boulder', radius: 3.5 },
-        { x: 8, z: 120, type: 'boulder', radius: 4 },
-        { x: 12, z: 123, type: 'boulder', radius: 3 },
-        { x: -12, z: 128, type: 'boulder', radius: 3.5 },
-        { x: -6, z: 135, type: 'boulder', radius: 3 },
-
-        // === Fallen tree maze (z: 145-175) - overlapping trees ===
-        { x: -8, z: 148, type: 'fallen_tree', length: 9, rotation: 0.3 },
-        { x: 5, z: 152, type: 'fallen_tree', length: 8, rotation: -0.6 },
-        { x: -8, z: 155, type: 'boulder', radius: 2 },
-        { x: -3, z: 160, type: 'fallen_tree', length: 10, rotation: 0.7 },
-        { x: 8, z: 165, type: 'fallen_tree', length: 7, rotation: -0.3 },
-        { x: 10, z: 170, type: 'boulder', radius: 3 },
-        { x: -6, z: 173, type: 'fallen_tree', length: 8, rotation: 0.5 },
-
-        // === Wide rugged zone - go around or plow through (z: 180-200) ===
-        { x: 0, z: 190, type: 'rugged', radius: 18 },
-        { x: -15, z: 195, type: 'boulder', radius: 4 },
-        { x: 16, z: 188, type: 'boulder', radius: 3 },
-
-        // === Narrow gap squeeze (z: 215-230) ===
-        { x: -4, z: 218, type: 'boulder', radius: 4 },
-        { x: 5, z: 218, type: 'boulder', radius: 4 },
-        { x: 0, z: 225, type: 'fallen_tree', length: 6, rotation: 1.5 },
-        { x: -15, z: 220, type: 'boulder', radius: 4 },
-        { x: 4, z: 235, type: 'fallen_tree', length: 7, rotation: -0.7 },
-
-        // === S-curve section 2 (z: 245-275) - tighter than the first ===
-        { x: 12, z: 245, type: 'boulder', radius: 3.5 },
-        { x: 6, z: 248, type: 'boulder', radius: 3 },
-        { x: -10, z: 255, type: 'boulder', radius: 4 },
-        { x: -4, z: 258, type: 'boulder', radius: 2.5 },
-        { x: 12, z: 260, type: 'boulder', radius: 2.5 },
-        { x: 8, z: 265, type: 'boulder', radius: 3.5 },
-        { x: -12, z: 270, type: 'boulder', radius: 3 },
-        { x: 0, z: 270, type: 'rugged', radius: 10 },
-
-        // === Dense tree corridor (z: 278-300) ===
-        { x: -3, z: 280, type: 'fallen_tree', length: 10, rotation: 0.6 },
-        { x: 7, z: 285, type: 'fallen_tree', length: 9, rotation: -0.5 },
-        { x: -10, z: 290, type: 'boulder', radius: 3 },
-        { x: -2, z: 293, type: 'fallen_tree', length: 8, rotation: 0.4 },
-        { x: 9, z: 298, type: 'fallen_tree', length: 7, rotation: -0.7 },
-
-        // === Boulder cluster bottleneck (z: 305-320) ===
-        { x: 7, z: 308, type: 'boulder', radius: 2 },
-        { x: -8, z: 310, type: 'boulder', radius: 3 },
-        { x: 3, z: 312, type: 'boulder', radius: 2.5 },
-        { x: -3, z: 316, type: 'boulder', radius: 2 },
-        { x: 10, z: 318, type: 'boulder', radius: 3.5 },
-        { x: 7, z: 330, type: 'fallen_tree', length: 8, rotation: -0.4 },
-
-        // === Final rugged + tree gauntlet (z: 345-380) ===
-        { x: 0, z: 355, type: 'rugged', radius: 15 },
-        { x: -5, z: 350, type: 'boulder', radius: 3.5 },
-        { x: 8, z: 358, type: 'boulder', radius: 2.5 },
-        { x: -6, z: 365, type: 'fallen_tree', length: 9, rotation: 0.5 },
-        { x: 5, z: 370, type: 'fallen_tree', length: 8, rotation: -0.6 },
-        { x: -10, z: 375, type: 'boulder', radius: 3 },
-        { x: 12, z: 378, type: 'boulder', radius: 2.5 },
-
-        // === Sprint to finish with scattered hazards (z: 385-430) ===
-        { x: 13, z: 390, type: 'boulder', radius: 2.5 },
-        { x: -7, z: 395, type: 'fallen_tree', length: 7, rotation: 0.4 },
-        { x: 5, z: 405, type: 'boulder', radius: 3 },
-        { x: -11, z: 410, type: 'fallen_tree', length: 7, rotation: -0.6 },
-        { x: -11, z: 420, type: 'boulder', radius: 3 },
-        { x: 8, z: 425, type: 'boulder', radius: 2.5 },
-        { x: -4, z: 430, type: 'fallen_tree', length: 6, rotation: 0.7 },
+    // Pendulums (Section 5: Pendulum Alley + one in Final Gauntlet)
+    PENDULUMS: [
+        { x: 0, z: 300, phase: 0,   period: 2.5, amplitude: 7, radius: 2 },
+        { x: 0, z: 317, phase: 1.3, period: 2.8, amplitude: 8, radius: 2.2 },
+        { x: 0, z: 334, phase: 2.6, period: 2.3, amplitude: 7, radius: 2 },
+        { x: 0, z: 348, phase: 3.9, period: 2.6, amplitude: 8, radius: 2.2 },
+        // Final gauntlet pendulum
+        { x: 0, z: 588, phase: 0.5, period: 2.4, amplitude: 6, radius: 1.8 },
     ],
 
-    // Hazards (kept but fewer - mostly decorative now)
+    // Gauntlet Lava Pools on the path (Section 7 + one in Final Gauntlet)
+    GAUNTLET_LAVA: [
+        { x: -5, z: 408, radius: 4 },
+        { x: 6,  z: 416, radius: 3.5 },
+        { x: -3, z: 425, radius: 3 },
+        { x: 5,  z: 433, radius: 4 },
+        { x: -6, z: 440, radius: 3.5 },
+        // Final gauntlet lava
+        { x: 3, z: 570, radius: 3 },
+    ],
+
+    // Crumbling bridge holes (Section 6)
+    BRIDGE_HOLES: [
+        { z: 368, halfWidth: 1.2 },
+        { z: 376, halfWidth: 1.5 },
+        { z: 384, halfWidth: 1.2 },
+    ],
+
+    // Obstacles - THE GAUNTLET layout
+    OBSTACLES: [
+        // === Section 1: River Ford (z=0-60) - boulders in water ===
+        { x: -8, z: 15, type: 'boulder', radius: 2.5 },
+        { x: 7, z: 25, type: 'boulder', radius: 3 },
+        { x: -5, z: 40, type: 'boulder', radius: 2 },
+        { x: 10, z: 50, type: 'boulder', radius: 2.5 },
+
+        // === Section 2: Boulder Slalom (z=60-130) - S-pattern ===
+        { x: 7, z: 68, type: 'boulder', radius: 3.5 },
+        { x: -8, z: 78, type: 'boulder', radius: 3 },
+        { x: 6, z: 88, type: 'boulder', radius: 4 },
+        { x: -7, z: 98, type: 'boulder', radius: 3.5 },
+        { x: 8, z: 105, type: 'boulder', radius: 3 },
+        { x: -6, z: 112, type: 'boulder', radius: 3.5 },
+        { x: 7, z: 120, type: 'boulder', radius: 4 },
+        { x: -8, z: 128, type: 'boulder', radius: 3 },
+
+        // === Section 3: Mud Swamp (z=130-180) - fallen trees blocking ===
+        { x: -6, z: 140, type: 'fallen_tree', length: 8, rotation: 0.4 },
+        { x: 5, z: 150, type: 'fallen_tree', length: 9, rotation: -0.6 },
+        { x: -4, z: 160, type: 'fallen_tree', length: 7, rotation: 0.3 },
+        { x: 7, z: 170, type: 'fallen_tree', length: 8, rotation: -0.5 },
+        { x: -8, z: 155, type: 'boulder', radius: 2 },
+        { x: 9, z: 165, type: 'boulder', radius: 2.5 },
+
+        // === Section 4: Tunnel (z=200-280) - hidden boulders ===
+        { x: 3, z: 225, type: 'boulder', radius: 2.5 },
+        { x: -4, z: 245, type: 'boulder', radius: 3 },
+        { x: 2, z: 260, type: 'boulder', radius: 2 },
+        { x: -3, z: 270, type: 'boulder', radius: 2.5 },
+
+        // === Section 8: Ice Patch (z=450-490) - boulders to dodge while drifting ===
+        { x: 5, z: 460, type: 'boulder', radius: 2.5 },
+        { x: -6, z: 475, type: 'boulder', radius: 3 },
+        { x: 4, z: 485, type: 'boulder', radius: 2 },
+
+        // === Section 10: Final Gauntlet (z=550-600) - a bit of everything ===
+        { x: -6, z: 555, type: 'boulder', radius: 3 },
+        { x: 7, z: 562, type: 'boulder', radius: 2.5 },
+        { x: -4, z: 568, type: 'fallen_tree', length: 7, rotation: 0.5 },
+        { x: 0, z: 565, type: 'rugged', radius: 8 },
+        { x: 5, z: 578, type: 'boulder', radius: 3.5 },
+        { x: -7, z: 585, type: 'boulder', radius: 2.5 },
+        { x: 3, z: 595, type: 'fallen_tree', length: 6, rotation: -0.4 },
+        { x: -5, z: 598, type: 'boulder', radius: 3 },
+    ],
+
+    // Hazards (decorative, off the main path)
     HAZARDS: [
-        { x: 40, z: 50, type: 'lava', radius: 12 },
-        { x: -35, z: 180, type: 'lava', radius: 10 },
-        { x: 50, z: 320, type: 'lava', radius: 14 },
-        { x: -50, z: 100, type: 'cliff', radius: 15 },
-        { x: 55, z: 250, type: 'cliff', radius: 12 },
-        { x: -45, z: 380, type: 'cliff', radius: 15 },
+        { x: 45, z: 100, type: 'lava', radius: 12 },
+        { x: -40, z: 300, type: 'lava', radius: 10 },
+        { x: 50, z: 500, type: 'lava', radius: 14 },
+        { x: -55, z: 200, type: 'cliff', radius: 15 },
+        { x: 55, z: 400, type: 'cliff', radius: 12 },
+        { x: -50, z: 550, type: 'cliff', radius: 15 },
     ],
 
     // Gunther quotes - iPad themed
@@ -199,6 +189,33 @@ export const GameConfig = {
             "I can see my house from here!",
             "Wheee! Zis is fun!",
             "I am ze tallest German boy!",
+        ],
+        tunnel: [
+            "Vhy is it so DARK?!",
+            "I cannot see mein YouTube!",
+            "Turn on ze lights!",
+            "Ze iPad is ze only light in here!",
+        ],
+        lava: [
+            "AAHHH! ZE LAVA IS BURNING!",
+            "NEIN! TOO HOT! TOO HOT!",
+            "Mein iPad is MELTING!",
+            "ZIS IS WORSE ZAN NO WIFI!",
+        ],
+        ice: [
+            "WHEEE! Ve are SLIDING!",
+            "Zis is like ze ice skating!",
+            "CAREFUL! Ze road is slippery!",
+        ],
+        fallingRocks: [
+            "ZE ROCKS! ZEY ARE FALLING!",
+            "Look out above!",
+            "Mein iPad will be CRUSHED!",
+        ],
+        water: [
+            "Ze river is PUSHING us!",
+            "Hold on to ze iPad!",
+            "Zis water is COLD!",
         ],
         death: {
             lava: "AAHHH! Ze lava is NOT cozy!",

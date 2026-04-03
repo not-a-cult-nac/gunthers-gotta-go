@@ -36,6 +36,11 @@ export class Vehicle {
         // Terrain tilt
         this.pitch = 0;
         this.roll = 0;
+
+        // Zone effect multipliers (set by Game.js each frame)
+        this.speedMultiplier = 1;
+        this.tractionMultiplier = 1;
+        this.lateralForce = 0;
     }
     
     init() {
@@ -79,7 +84,7 @@ export class Vehicle {
             this.speed *= 0.95;
         } else {
             const accel = GameConfig.VEHICLE_ACCELERATION;
-            let maxSpeed = GameConfig.VEHICLE_MAX_SPEED * (this.isBoosting ? GameConfig.VEHICLE_BOOST_MULTIPLIER : 1);
+            let maxSpeed = GameConfig.VEHICLE_MAX_SPEED * (this.isBoosting ? GameConfig.VEHICLE_BOOST_MULTIPLIER : 1) * this.speedMultiplier;
 
             // Rugged terrain slows vehicle further
             if (world && world.isInRuggedTerrain(this.position.x, this.position.z)) {
@@ -97,7 +102,7 @@ export class Vehicle {
             
             // Steering
             if (Math.abs(this.speed) > 0.5) {
-                const turnSpeed = GameConfig.VEHICLE_TURN_SPEED * (this.speed > 0 ? 1 : -1);
+                const turnSpeed = GameConfig.VEHICLE_TURN_SPEED * (this.speed > 0 ? 1 : -1) * this.tractionMultiplier;
                 if (input.left) {
                     this.rotation += turnSpeed * delta;
                 }
@@ -109,14 +114,20 @@ export class Vehicle {
             this.handleBoost(delta, input);
         }
         
-        // Apply velocity
-        this.velocity.set(
-            Math.sin(this.rotation) * this.speed,
-            0,
-            Math.cos(this.rotation) * this.speed
-        );
-        
+        // Apply velocity with traction-based blending (creates drift on ice)
+        const targetVelX = Math.sin(this.rotation) * this.speed;
+        const targetVelZ = Math.cos(this.rotation) * this.speed;
+        const blend = Math.min(1, this.tractionMultiplier + 0.15);
+        this.velocity.x += (targetVelX - this.velocity.x) * blend;
+        this.velocity.y = 0;
+        this.velocity.z += (targetVelZ - this.velocity.z) * blend;
+
         this.position.add(this.velocity.clone().multiplyScalar(delta));
+
+        // Apply lateral force (e.g., water current)
+        if (this.lateralForce !== 0) {
+            this.position.x += this.lateralForce * delta;
+        }
         
         // Get terrain height and slope if world provided
         if (world) {

@@ -62,6 +62,10 @@ export class Game {
         this._zoneSpoken = {};
         this._lavaScreamCooldown = 0;
         this._pendulumHitCooldown = 0;
+
+        // Enemy drain state
+        this.enemyDrainMultiplier = 1;
+        this._enemyDrainSpoke = false;
     }
 
     async init() {
@@ -211,7 +215,7 @@ export class Game {
         }
 
         // Update UI
-        this.uiManager.update(this.vehicle, this.gunther, this.player, this.enemyManager, this.iPadCharge);
+        this.uiManager.update(this.vehicle, this.gunther, this.player, this.enemyManager, this.iPadCharge, this.enemyDrainMultiplier);
 
         // Render
         this.renderer.render(this.scene, this.camera);
@@ -220,8 +224,29 @@ export class Game {
     updateiPadCharge(delta) {
         const speed = Math.abs(this.vehicle.speed);
 
+        // Calculate enemy proximity drain multiplier
+        let enemyDrainSum = 0;
+        const range = GameConfig.ENEMY_DRAIN_RANGE;
+        for (const enemy of this.enemyManager.enemies) {
+            if (enemy.isDead) continue;
+            const dist = enemy.position.distanceTo(this.vehicle.position);
+            if (dist < range) {
+                enemyDrainSum += ((range - dist) / range) * GameConfig.ENEMY_DRAIN_FACTOR;
+            }
+        }
+        this.enemyDrainMultiplier = 1 + enemyDrainSum;
+
+        // Trigger Gunther quote when drain multiplier exceeds 1.5x
+        if (this.enemyDrainMultiplier > 1.5 && !this._enemyDrainSpoke) {
+            this._enemyDrainSpoke = true;
+            const quotes = GameConfig.QUOTES.enemyDrain;
+            this.gunther.speak(quotes[Math.floor(Math.random() * quotes.length)]);
+        } else if (this.enemyDrainMultiplier <= 1.2) {
+            this._enemyDrainSpoke = false;
+        }
+
         if (speed > GameConfig.IPAD_CHARGE_SPEED_THRESHOLD) {
-            this.iPadCharge -= GameConfig.IPAD_DRAIN_RATE * delta;
+            this.iPadCharge -= GameConfig.IPAD_DRAIN_RATE * this.enemyDrainMultiplier * delta;
         } else {
             this.iPadCharge += GameConfig.IPAD_CHARGE_RATE * delta;
         }

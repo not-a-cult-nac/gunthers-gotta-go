@@ -36,6 +36,10 @@ export const GameConfig = {
     GUNTHER_REBOARD_CHARGE: 10,
     GUNTHER_REBOARD_DISTANCE: 8,
 
+    // Enemy proximity drain
+    ENEMY_DRAIN_RANGE: 25,
+    ENEMY_DRAIN_FACTOR: 1.5,
+
     // Enemies (background scenery only)
     ENEMY_SPAWN_INTERVAL: 5,
     ENEMY_MAX_COUNT: 8,
@@ -211,6 +215,12 @@ export const GameConfig = {
             "ZE ROCKS! ZEY ARE FALLING!",
             "Look out above!",
             "Mein iPad will be CRUSHED!",
+        ],
+        enemyDrain: [
+            "Ze strangers are draining mein WiFi!",
+            "Zey are stealing ze bandwidth!",
+            "Mein signal! It is getting WEAK!",
+            "Ze creepy people are interfering viz ze iPad!",
         ],
         water: [
             "Ze river is PUSHING us!",

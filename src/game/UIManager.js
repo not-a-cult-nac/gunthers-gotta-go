@@ -11,6 +11,8 @@ export class UIManager {
             distance: document.getElementById('distance'),
             jeepHealth: document.getElementById('jeep-health-bar'),
             iPadCharge: document.getElementById('ipad-charge-bar'),
+            iPadBarContainer: document.querySelector('.ipad-bar-container'),
+            wifiInterference: document.getElementById('wifi-interference'),
             guntherSpeech: document.getElementById('gunther-speech'),
             endScreen: document.getElementById('end-screen'),
             endTitle: document.getElementById('end-title'),
@@ -18,9 +20,10 @@ export class UIManager {
         };
 
         this.speechTimeout = null;
+        this._drainPulseTime = 0;
     }
 
-    update(vehicle, gunther, player, enemyManager, iPadCharge) {
+    update(vehicle, gunther, player, enemyManager, iPadCharge, enemyDrainMultiplier = 1) {
         // Gunther status
         this.elements.guntherStatus.textContent = 'IN CAR';
         this.elements.guntherStatus.style.color = '#0f0';
@@ -52,6 +55,23 @@ export class UIManager {
                 this.elements.iPadCharge.style.background = 'linear-gradient(90deg, #aaaa00, #ffff00)';
             } else {
                 this.elements.iPadCharge.style.background = 'linear-gradient(90deg, #00aa00, #00ff00)';
+            }
+
+            // Enemy drain visual: pulse the bar red when drain is boosted
+            if (enemyDrainMultiplier > 1.05) {
+                this._drainPulseTime += 0.05;
+                const pulse = 0.3 + Math.sin(this._drainPulseTime * 8) * 0.3;
+                const intensity = Math.min(1, (enemyDrainMultiplier - 1) / 1.5);
+                this.elements.iPadCharge.style.boxShadow = `0 0 ${6 + intensity * 10}px rgba(255, 0, 0, ${pulse * intensity})`;
+                if (this.elements.wifiInterference) {
+                    this.elements.wifiInterference.style.opacity = String(intensity * 0.9);
+                }
+            } else {
+                this._drainPulseTime = 0;
+                this.elements.iPadCharge.style.boxShadow = 'none';
+                if (this.elements.wifiInterference) {
+                    this.elements.wifiInterference.style.opacity = '0';
+                }
             }
         }
     }

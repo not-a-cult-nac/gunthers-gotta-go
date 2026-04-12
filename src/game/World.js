@@ -3,13 +3,15 @@
  */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GameConfig } from './GameConfig.js';
 
 export class World {
-    constructor(scene, physicsWorld, RAPIER) {
+    constructor(scene, physicsWorld, RAPIER, isMobile = false) {
         this.scene = scene;
         this.physicsWorld = physicsWorld;
         this.RAPIER = RAPIER;
+        this.isMobile = isMobile;
         this.obstacles = [];
         this.ruggedPatches = [];
         this.pendulumObjects = [];
@@ -473,7 +475,8 @@ export class World {
         const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 1.0 });
 
         // Build tunnel segments following the path curve
-        for (let z = zone.startZ; z < zone.endZ; z += 10) {
+        const tunnelStep = this.isMobile ? 20 : 10;
+        for (let z = zone.startZ; z < zone.endZ; z += tunnelStep) {
             const pathX = this.getPathX(z + 5);
 
             // Left wall
@@ -725,7 +728,8 @@ export class World {
             opacity: 0.6,
             roughness: 0.1,
         });
-        for (let i = 0; i < 15; i++) {
+        const crystalCount = this.isMobile ? 5 : 15;
+        for (let i = 0; i < crystalCount; i++) {
             const fx = pathX + (Math.random() - 0.5) * width * 0.8;
             const fz = zone.startZ + Math.random() * depth;
             const crystal = new THREE.Mesh(
@@ -747,7 +751,8 @@ export class World {
 
         const wallMat = new THREE.MeshStandardMaterial({ color: 0x554433, roughness: 0.95, flatShading: true });
 
-        for (let z = zone.startZ; z < zone.endZ; z += 10) {
+        const canyonStep = this.isMobile ? 20 : 10;
+        for (let z = zone.startZ; z < zone.endZ; z += canyonStep) {
             const pathX = this.getPathX(z + 5);
 
             // Left canyon wall
@@ -822,7 +827,6 @@ export class World {
     }
 
     createPNWForest() {
-        // Shared materials for all trees (performance)
         const trunkMats = [
             new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.95 }),
             new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 0.95 }),
@@ -832,36 +836,34 @@ export class World {
             new THREE.MeshStandardMaterial({ color: 0x1a4d2e, roughness: 0.85, flatShading: true }),
             new THREE.MeshStandardMaterial({ color: 0x1e5533, roughness: 0.85, flatShading: true }),
             new THREE.MeshStandardMaterial({ color: 0x2a6040, roughness: 0.85, flatShading: true }),
-            new THREE.MeshStandardMaterial({ color: 0x1a4a3a, roughness: 0.85, flatShading: true }), // blue-green
-            new THREE.MeshStandardMaterial({ color: 0x16402a, roughness: 0.85, flatShading: true }), // dark
+            new THREE.MeshStandardMaterial({ color: 0x1a4a3a, roughness: 0.85, flatShading: true }),
+            new THREE.MeshStandardMaterial({ color: 0x16402a, roughness: 0.85, flatShading: true }),
         ];
 
-        // Seeded pseudo-random for consistent tree placement
         const seed = 42;
         let rng = seed;
         const rand = () => { rng = (rng * 16807 + 0) % 2147483647; return rng / 2147483647; };
 
+        const maxTrees = this.isMobile ? 30 : 110;
         const trees = [];
-        const minDist = 5; // minimum distance between trees
-
-        // Place trees along the full route
+        const minDist = 5;
         const startZ = GameConfig.START_Z - 20;
         const endZ = GameConfig.GOAL_Z + 20;
-        const attempts = 600; // try many placements, keep ~100
+        const attempts = this.isMobile ? 200 : 600;
 
-        for (let i = 0; i < attempts && trees.length < 110; i++) {
+        // Collect geometries by material for batch merging (~8 draw calls instead of ~550)
+        const trunkGeosByMat = trunkMats.map(() => []);
+        const foliageGeosByMat = foliageMats.map(() => []);
+
+        for (let i = 0; i < attempts && trees.length < maxTrees; i++) {
             const z = startZ + rand() * (endZ - startZ);
             const pathX = this.getPathX(z);
-
-            // Place on either side of the road, 15-60m away from path center
             const side = rand() > 0.5 ? 1 : -1;
             const distFromPath = 15 + rand() * 45;
             const x = pathX + side * distFromPath;
 
-            // Skip if out of world bounds
             if (Math.abs(x) > GameConfig.WORLD_WIDTH - 5) continue;
 
-            // Skip if too close to existing tree
             let tooClose = false;
             for (const t of trees) {
                 const dx = t.x - x;
@@ -870,10 +872,9 @@ export class World {
             }
             if (tooClose) continue;
 
-            // Clustering: 30% chance to spawn 2-4 extras nearby
             const clusterCount = rand() < 0.3 ? Math.floor(2 + rand() * 3) : 0;
             const positions = [{ x, z }];
-            for (let c = 0; c < clusterCount && trees.length + positions.length < 120; c++) {
+            for (let c = 0; c < clusterCount && trees.length + positions.length < maxTrees + 10; c++) {
                 const cx = x + (rand() - 0.5) * 12;
                 const cz = z + (rand() - 0.5) * 12;
                 if (Math.abs(cx - this.getPathX(cz)) > 14) {
@@ -882,58 +883,64 @@ export class World {
             }
 
             for (const pos of positions) {
-                const height = 8 + rand() * 17; // 8-25m tall
+                const height = 8 + rand() * 17;
                 const y = this.getTerrainHeight(pos.x, pos.z);
-                this.createDouglasFir(
-                    pos.x, y, pos.z, height,
-                    trunkMats[Math.floor(rand() * trunkMats.length)],
-                    foliageMats[Math.floor(rand() * foliageMats.length)],
-                    rand
-                );
+                const trunkIdx = Math.floor(rand() * trunkMats.length);
+                const foliageIdx = Math.floor(rand() * foliageMats.length);
+                const leanX = (rand() - 0.5) * 0.04;
+                const leanZ = (rand() - 0.5) * 0.04;
+
+                // Group transform: lean rotation + world position
+                const groupMat4 = new THREE.Matrix4()
+                    .makeRotationFromEuler(new THREE.Euler(leanX, 0, leanZ));
+                groupMat4.setPosition(pos.x, y, pos.z);
+
+                // Trunk
+                const trunkRadius = 0.2 + height * 0.02;
+                const trunkHeight = height * 0.85;
+                const trunkGeo = new THREE.CylinderGeometry(trunkRadius * 0.5, trunkRadius, trunkHeight, 6);
+                const trunkLocal = new THREE.Matrix4().makeTranslation(0, trunkHeight / 2, 0);
+                trunkGeo.applyMatrix4(trunkLocal.premultiply(groupMat4));
+                trunkGeosByMat[trunkIdx].push(trunkGeo);
+
+                // Foliage cones
+                const layers = 3 + (height > 15 ? 1 : 0);
+                const baseRadius = height * 0.18;
+                const layerHeight = (height * 0.7) / layers;
+                const foliageStartY = height * 0.3;
+                for (let li = 0; li < layers; li++) {
+                    const t = li / (layers - 1);
+                    const radius = baseRadius * (1 - t * 0.55) * (0.9 + rand() * 0.2);
+                    const coneH = layerHeight * (1.2 - t * 0.3);
+                    const coneGeo = new THREE.ConeGeometry(radius, coneH, 7);
+                    const coneLocal = new THREE.Matrix4().makeTranslation(
+                        0, foliageStartY + li * layerHeight * 0.85 + coneH / 2, 0
+                    );
+                    coneGeo.applyMatrix4(coneLocal.premultiply(groupMat4));
+                    foliageGeosByMat[foliageIdx].push(coneGeo);
+                }
+
                 trees.push(pos);
             }
         }
-    }
 
-    createDouglasFir(x, y, z, height, trunkMat, foliageMat, rand) {
-        const group = new THREE.Group();
-        group.position.set(x, y, z);
-
-        // Trunk - tall narrow cylinder
-        const trunkRadius = 0.2 + height * 0.02;
-        const trunkHeight = height * 0.85;
-        const trunk = new THREE.Mesh(
-            new THREE.CylinderGeometry(trunkRadius * 0.5, trunkRadius, trunkHeight, 6),
-            trunkMat
-        );
-        trunk.position.y = trunkHeight / 2;
-        trunk.castShadow = true;
-        group.add(trunk);
-
-        // Foliage: 3-4 stacked cones, getting smaller toward top
-        const layers = 3 + (height > 15 ? 1 : 0);
-        const baseRadius = height * 0.18;
-        const layerHeight = (height * 0.7) / layers;
-        const startY = height * 0.3;
-
-        for (let i = 0; i < layers; i++) {
-            const t = i / (layers - 1); // 0 at bottom, 1 at top
-            const radius = baseRadius * (1 - t * 0.55) * (0.9 + rand() * 0.2);
-            const coneH = layerHeight * (1.2 - t * 0.3);
-            const cone = new THREE.Mesh(
-                new THREE.ConeGeometry(radius, coneH, 7),
-                foliageMat
-            );
-            cone.position.y = startY + i * layerHeight * 0.85 + coneH / 2;
-            cone.castShadow = true;
-            group.add(cone);
+        // Merge all geometries per material into single meshes
+        for (let i = 0; i < trunkMats.length; i++) {
+            if (trunkGeosByMat[i].length === 0) continue;
+            const merged = mergeGeometries(trunkGeosByMat[i]);
+            const mesh = new THREE.Mesh(merged, trunkMats[i]);
+            mesh.castShadow = true;
+            this.scene.add(mesh);
+            trunkGeosByMat[i].forEach(g => g.dispose());
         }
-
-        // Slight random lean for natural look
-        group.rotation.x = (rand() - 0.5) * 0.04;
-        group.rotation.z = (rand() - 0.5) * 0.04;
-
-        this.scene.add(group);
+        for (let i = 0; i < foliageMats.length; i++) {
+            if (foliageGeosByMat[i].length === 0) continue;
+            const merged = mergeGeometries(foliageGeosByMat[i]);
+            const mesh = new THREE.Mesh(merged, foliageMats[i]);
+            mesh.castShadow = true;
+            this.scene.add(mesh);
+            foliageGeosByMat[i].forEach(g => g.dispose());
+        }
     }
 
     getHeightAt(x, z) {

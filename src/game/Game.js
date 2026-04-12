@@ -83,7 +83,8 @@ export class Game {
         );
 
         // Check if mobile
-        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.location.search.includes('mobile');
+        this.isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.location.search.includes('mobile');
+        const isMobile = this.isMobile;
 
         // Renderer
         this.renderer = new THREE.WebGLRenderer({
@@ -91,7 +92,7 @@ export class Game {
             powerPreference: 'high-performance'
         });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1 : 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
         document.body.appendChild(this.renderer.domElement);
@@ -110,7 +111,7 @@ export class Game {
         this.audioManager = new AudioManager();
         this.audioManager.init();
 
-        this.world = new World(this.scene, this.physicsWorld, this.RAPIER);
+        this.world = new World(this.scene, this.physicsWorld, this.RAPIER, isMobile);
         await this.world.init();
 
         this.vehicle = new Vehicle(this.scene, this.physicsWorld, this.RAPIER);
@@ -147,8 +148,9 @@ export class Game {
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
         this.sunLight.position.set(50, 100, 50);
         this.sunLight.castShadow = true;
-        this.sunLight.shadow.mapSize.width = 2048;
-        this.sunLight.shadow.mapSize.height = 2048;
+        const shadowRes = this.isMobile ? 1024 : 2048;
+        this.sunLight.shadow.mapSize.width = shadowRes;
+        this.sunLight.shadow.mapSize.height = shadowRes;
         this.sunLight.shadow.camera.near = 0.5;
         this.sunLight.shadow.camera.far = 500;
         this.sunLight.shadow.camera.left = -100;
